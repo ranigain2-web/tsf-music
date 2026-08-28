@@ -475,3 +475,31 @@ Stage Summary:
   calls; (d) without deno on user Mac? — deno IS bundled now (resources/bin).
   (e) AI features need ~/.z-ai-config on the Mac (documented in README;
   graceful degradation otherwise).
+
+---
+Task ID: 11
+Agent: Z.ai Code (cron R-M2 — native shell polish: menu bar/dock/tray/boot-retry + §2.8 lyrics share)
+Task: R-M2 of the macOS gauntlet — Rust shell polish round (native menu bar with Playback section, dock menu, About panel, boot-error retry) + [mandatory] styling details + [mandatory] new features. Trace: web-cron-review-202608281757.
+
+Work Log:
+- STATUS ASSESS: dev 200, POT alive, worklog Tasks 1-10 reviewed → todos = R-M2 scope. No bugs found in QA baseline (home renders, bg #121212 exact, streams resolving incl. HEAD/warm).
+- TOOLCHAIN BREAKTHROUGH: installed rustup (1.98.0) + x86_64-apple-darwin target → attempted `cargo check --target x86_64-apple-darwin` locally. HARD WALL discovered: objc2-exception-helper compiles Objective-C (try_catch.m) via cc → impossible without a macOS SDK, even for check-only. CONSEQUENCE: CI remains the only Rust validator (ubuntu check job = linux path, macos build job = the real mac path). Compensated with a line-by-line self-review that caught ONE REAL COMPILE BUG before CI ever sees it:
+  - **E0382 use-after-move** in `media_update` — `app` was moved into the `run_on_main_thread` closure AND used as the receiver; fixed with a clone-first pattern (commented in code).
+- RUST SHELL v2 (src-tauri/src/lib.rs rewrite, ~700 lines):
+  - **Native menu bar**: App (About TSF Music w/ tagline, Services, Hide/Quit roles) / File (Close Window) / Edit (undo/redo/cut/copy/paste/select-all — REQUIRED for search fields) / View (Reload ⌘R, Fullscreen, **Lyrics ⌥⌘L**, **Queue ⌥⌘Q**) / **Playback** (Play-Pause ⌥⌘P, Next ⌥⌘→, Previous ⌥⌘←, Stop, Seek Back/Forward 10s, Volume Up/Down ⌥⌘↑↓ — the Spotify-desktop signature menu) / Window (minimize/zoom/bring-all-to-front).
+  - **Dock menu** (macOS): Show TSF Music / Play-Pause / Next / Previous (set_dock_menu, cfg-gated).
+  - **Menu-bar tray**: icon = bundled 32x32 (image-png feature), left-click shows window, right-click menu = Show/Play-Pause/Next/Previous/**Restart Engine…**.
+  - **Single action funnel**: menu, dock, tray, media keys and lockscreen ALL dispatch through `handle_action_id` → the same `tsf-media-command` / `tsf-ui-command` CustomEvents the web already consumes. One web handler serves every native surface.
+  - **Boot recovery**: new `boot_retry` IPC command (AtomicBool-guarded) — kills stale children, reboots engine; fallback page got live `tsf-boot-status` progress lines ("Starting the playback-token service…" etc.) and a green Retry pill that invokes boot_retry via __TAURI__ (styled hover/active states, reduced-motion safe).
+  - New commands wired: invoke_handler = [media_update, boot_retry].
+- WEB BRIDGE v2: nativeMedia.ts Tauri path extended (seekby signed delta, volume absolute, **voldelta** signed); AudioEngine switch grew `seekby` (position + delta), `volume` (absolute → setVolume), `voldelta` (clamped in store). useTauriUICommands hook (new) maps tsf-ui-command → toggleLyrics/toggleQueue; mounted in AppShell. Fixed TS2339 (detail type missing `delta`).
+- [MANDATORY FEATURE] **§2.8 Lyrics share**: SyncedLyrics got a floating SHARE pill (bottom-right, glassy black/60 + backdrop-blur, green focus ring, 44px touch target, hover-reveal on desktop / always-on touch) that shares the CURRENT lyric line + attribution ("line" — Title · Artist) via Web Share API → clipboard fallback → sonner toast; AbortError (user-closed sheet) stays silent.
+- [MANDATORY STYLING] ::selection + ::-moz-selection green-on-dark (rgba(30,215,96,0.32)) — Spotify desktop text-selection parity; boot page got the full Retry-button styling system.
+- TOOLING: eslint ignores extended (.next-mac/src-tauri target+gen+resources/tool-results) — was 736 false errors from build output; now 0/0. SearchView stale eslint-disable removed. `voldelta`/`seekby` typed through the CustomEvent detail union.
+- VERIFICATION (agent-browser): real-click play → NP screen → Lyrics → share button LIVE (aria-label "Share lyric: i can't tell you why" — a real current line); click → toast "Could not share this lyric" (headless has no navigator.share/clipboard → correct error-toast path; on a real Mac/WKWebView navigator.share exists → native sheet). Screenshot tsf-analysis/qa/rm2-lyrics-share.png (karaoke lyrics + dominant-color + SHARE pill + 30s-preview honest badge + t=0:16 playing). BAR-A: bodyBg #121212 EXACT. lint 0/0, tsc clean. dev.log: only a STALE Fast-Refresh warning from line 298 (previous session); recent tail all 200s.
+- FIXED-BUG CREDIT: the self-review E0382 catch above (would have failed the first CI run).
+
+Stage Summary:
+- R-M2 DONE: the macOS shell is now genuinely native-feeling — full menu bar (with Playback section), dock menu, tray with transport, About panel, recoverable boot, plus web-side §2.8 lyric share + selection styling. BAR-M3 (native integration) is now functionally complete on paper: media keys ✓ lockscreen NP ✓ App-Nap-off ✓ menu bar ✓ dock ✓ tray ✓ — runtime proof pending the first CI build (no macOS host in sandbox; cargo check for darwin locally impossible — objc2 C code needs an Apple SDK).
+- Unresolved: (1) CI never executed (no git remote — everything awaits the user's push); (2) Rust compile-safety = self-review only (the linux check job will validate the platform-neutral parts; mac path only compiles on the runner); (3) BAR-M4 blind screenshot loop not started (needs the app running on a Mac, or at minimum a first CI artifact for install instructions round-trip).
+- Recommended next (R-M3): probe tuning (deno A/B in CI, threshold 50→70%) + bundle-size diet (prune audit of standalone node_modules, optional deno) + a `.github/workflows/README` / PUSH-TO-GITHUB.md playbook for the user (exact steps: create repo → push → enable Actions → download x64 dmg → First-Run command). Consider pulling R-M4 tray/global-shortcuts extras forward only after first CI run triage.

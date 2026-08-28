@@ -32,6 +32,15 @@
       }
       @keyframes slide { 0% { transform: translateX(-100%);} 100% { transform: translateX(350%);} }
       .err { display: none; color: #f15e6c; }
+      .retry {
+        display: inline-flex; align-items: center; justify-content: center;
+        height: 40px; padding: 0 24px; border: 0; border-radius: 500px;
+        background: #1ed760; color: #121212; font-size: 14px; font-weight: 700;
+        font-family: inherit; letter-spacing: 0.2px; cursor: pointer;
+        transition: transform 0.15s ease, background 0.15s ease;
+      }
+      .retry:hover { background: #3be477; transform: scale(1.04); }
+      .retry:active { transform: scale(0.97); }
       code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #7f7f7f; }
       @media (prefers-reduced-motion: reduce) { .bar i { animation: none; } }
     </style>
@@ -45,15 +54,43 @@
       <p id="status">Booting the local playback engine and token service — this takes a few seconds on first launch.</p>
       <div class="bar" aria-hidden="true"><i></i></div>
       <p class="err" id="err"></p>
+      <button id="retry" type="button" style="display:none" class="retry">Retry</button>
       <p><code>com.tsfmusic.desktop</code></p>
     </main>
     <script>
-      window.addEventListener("tsf-boot-error", function (e) {
-        document.querySelector(".bar").style.display = "none";
-        document.getElementById("status").textContent = "The engine failed to start.";
-        var err = document.getElementById("err");
-        err.style.display = "block";
-        err.textContent = (e.detail || "Unknown error") + "";
+      var statusEl = document.getElementById("status");
+      var errBox = document.getElementById("err");
+      var bar = document.querySelector(".bar");
+      var retry = document.getElementById("retry");
+
+      function fail(msg) {
+        bar.style.display = "none";
+        statusEl.textContent = "The engine failed to start.";
+        errBox.style.display = "block";
+        errBox.textContent = (msg || "Unknown error") + "";
+        retry.style.display = "inline-flex";
+      }
+
+      window.addEventListener("tsf-boot-error", function (e) { fail(e.detail); });
+      window.addEventListener("tsf-boot-status", function (e) {
+        if (e.detail && e.detail.text) statusEl.textContent = e.detail.text;
+      });
+
+      retry.addEventListener("click", function () {
+        retry.style.display = "none";
+        errBox.style.display = "none";
+        bar.style.display = "block";
+        statusEl.textContent = "Restarting the engine…";
+        try {
+          var t = window.__TAURI__;
+          if (t && t.core && typeof t.core.invoke === "function") {
+            t.core.invoke("boot_retry");
+          } else {
+            location.reload();
+          }
+        } catch (e) {
+          location.reload();
+        }
       });
     </script>
   </body>

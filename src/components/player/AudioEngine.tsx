@@ -282,6 +282,23 @@ export function AudioEngine() {
         case 'seekto':
           if (typeof seekTime === 'number' && isFinite(seekTime)) seekTo(seekTime)
           break
+        case 'seekby':
+          // signed delta from native menu/dock/tray ("Seek Back/Forward 10s")
+          if (typeof seekTime === 'number' && isFinite(seekTime) && seekTime !== 0) {
+            seekTo(Math.max(0, usePlayer.getState().position + seekTime))
+          }
+          break
+        case 'volume':
+          // souvlaki SetVolume (system media UI) → store volume (0..1 clamped in store)
+          if (typeof seekTime === 'number' && isFinite(seekTime)) usePlayer.getState().setVolume(seekTime)
+          break
+        case 'voldelta':
+          // native menu Volume Up/Down — signed delta around current volume
+          if (typeof seekTime === 'number' && isFinite(seekTime) && seekTime !== 0) {
+            const s = usePlayer.getState()
+            s.setVolume(s.volume + seekTime)
+          }
+          break
         default:
           break
       }

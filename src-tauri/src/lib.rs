@@ -5,16 +5,20 @@
 //!     (Next standalone server run by a bundled Bun runtime) and the POT
 //!     provider (yt-dlp proof-of-origin token minter) as child processes,
 //!     waits for health, then points a native WKWebView window at it.
-//!   - Everything user-visible (window, menu, dock, media keys, lockscreen
-//!     Now Playing) is handled natively here:
+//!   - Everything user-visible (window, menu bar, dock menu, tray, media
+//!     keys, lockscreen Now Playing) is handled natively here:
 //!       * Now Playing / media keys via `souvlaki` (MPNowPlayingInfoCenter +
 //!         MPRemoteCommandCenter on macOS).
+//!       * Native menu bar with a Playback section, dock menu, menu-bar tray
+//!         — all dispatching into the page as CustomEvents.
 //!       * Web → native: `media_update` IPC command (metadata / playback state).
-//!       * Native → web: `tsf-media-command` CustomEvent eval'd into the page.
+//!       * Native → web: `tsf-media-command` / `tsf-ui-command` CustomEvents.
 //!   - App Nap is disabled in Info.plist (`NSAppSleepDisabled`) so audio keeps
 //!     playing when the window is hidden/minimized.
+//!   - Boot failure is recoverable from the UI: the fallback page's Retry
+//!     button invokes `boot_retry`, which kills stale children and boots again.
 
-use serde_json::{json, Value};
+use serde_json::json;
 use souvlaki::{
     MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, MediaPosition, PlatformConfig,
     SeekDirection,
@@ -24,9 +28,13 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tauri::{Manager, Theme, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::image::Image;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Manager, Theme, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -54,6 +62,9 @@ unsafe impl Sync for MediaCell {}
 pub struct MediaState {
     pub controls: MediaCell,
 }
+
+/// Guards boot so the Retry button can't double-spawn the engine.
+static BOOTING: AtomicBool = AtomicBool::new(false);
 
 // ---------------------------------------------------------------------------
 // Small TCP helpers (no HTTP client dep — the shell stays tiny)
@@ -123,6 +134,41 @@ fn log_stdio(app: &AppHandle, name: &str) -> Result<Stdio, String> {
 }
 
 // ---------------------------------------------------------------------------
+// Native → web dispatch (one funnel for souvlaki, menu, dock, tray)
+// ---------------------------------------------------------------------------
+
+fn post_media_command(app: &AppHandle, detail: serde_json::Value) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.eval(&format!(
+            "window.dispatchEvent(new CustomEvent('tsf-media-command', {{ detail: {detail} }}))"
+        ));
+    }
+}
+
+fn post_ui_command(app: &AppHandle, action: &str) {
+    if let Some(win) = app.get_webview_window("main") {
+        let detail = json!({ "action": action });
+        let _ = win.eval(&format!(
+            "window.dispatchEvent(new CustomEvent('tsf-ui-command', {{ detail: {detail} }}))"
+        ));
+    }
+}
+
+fn reload_page(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.eval("location.reload()");
+    }
+}
+
+fn show_main(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Service boot
 // ---------------------------------------------------------------------------
 
@@ -139,7 +185,30 @@ fn boot_services(app: &AppHandle) -> BootOutcome {
     }
 }
 
-fn boot_services_inner(app: &AppHandle) -> Result<u16, String> {
+fn boot_status(win: Option<&WebviewWindow>, msg: &str) {
+    if let Some(win) = win {
+        let detail = json!({ "text": msg });
+        let _ = win.eval(&format!(
+            "window.dispatchEvent(new CustomEvent('tsf-boot-status', {{ detail: {detail} }}))"
+        ));
+    }
+}
+
+fn kill_children(app: &AppHandle) {
+    let st = app.state::<ChildProcs>();
+    if let Some(mut p) = st.server.lock().unwrap().take() {
+        let _ = p.kill();
+        let _ = p.wait();
+    }
+    if let Some(mut p) = st.pot.lock().unwrap().take() {
+        let _ = p.kill();
+        let _ = p.wait();
+    }
+}
+
+fn boot_services_inner(app: &AppHandle, win: Option<&WebviewWindow>) -> Result<u16, String> {
+    boot_status(win, "Preparing the local engine…");
+
     let runtime_bun = res(app, "resources/runtime/bun")?;
     let server_dir = res(app, "resources/server")?;
     let pot_dir = res(app, "resources/pot-provider")?;
@@ -164,6 +233,7 @@ fn boot_services_inner(app: &AppHandle) -> Result<u16, String> {
         format!("{}:{}", bin_dir.display(), std::env::var("PATH").unwrap_or_default());
 
     // --- POT provider (BotGuard proof-of-origin tokens for yt-dlp) -----------
+    boot_status(win, "Starting the playback-token service…");
     let pot = Command::new(&runtime_bun)
         .arg(pot_dir.join("index.js"))
         .current_dir(&pot_dir)
@@ -183,6 +253,7 @@ fn boot_services_inner(app: &AppHandle) -> Result<u16, String> {
     }
 
     // --- Next standalone server (the whole TSF Music engine) ----------------
+    boot_status(win, "Starting the music engine…");
     let resource_root = res(app, "")?;
     let server = Command::new(&runtime_bun)
         .arg(server_dir.join("server.js"))
@@ -207,6 +278,7 @@ fn boot_services_inner(app: &AppHandle) -> Result<u16, String> {
         *st.port.lock().unwrap() = port;
     }
 
+    boot_status(win, "Warming up your library…");
     let addr = format!("127.0.0.1:{port}");
     let deadline = Instant::now() + Duration::from_secs(120);
     while Instant::now() < deadline {
@@ -218,16 +290,37 @@ fn boot_services_inner(app: &AppHandle) -> Result<u16, String> {
     Err("engine did not become healthy within 120s (see ~/Library/Logs/com.tsfmusic.desktop)".into())
 }
 
-fn boot_and_navigate(app: AppHandle, win: WebviewWindow) {
+fn boot_task(app: AppHandle) {
+    if BOOTING.swap(true, Ordering::SeqCst) {
+        return; // a boot is already in flight
+    }
+    let win = app.get_webview_window("main");
+    kill_children(&app);
     let outcome = boot_services(&app);
     if outcome.ok {
-        let _ = win.eval(&format!("location.replace('http://127.0.0.1:{}/')", outcome.port));
+        if let Some(win) = win.as_ref() {
+            boot_status(Some(win), "Opening your library…");
+        }
+        if let Some(win) = win {
+            let _ =
+                win.eval(&format!("location.replace('http://127.0.0.1:{}/')", outcome.port));
+        }
     } else {
         let msg = outcome.error.replace(['\'', '"', '\\'], "");
-        let _ = win.eval(&format!(
-            "window.dispatchEvent(new CustomEvent('tsf-boot-error', {{ detail: '{msg}' }}))"
-        ));
+        if let Some(win) = win {
+            let _ = win.eval(&format!(
+                "window.dispatchEvent(new CustomEvent('tsf-boot-error', {{ detail: '{msg}' }}))"
+            ));
+        }
     }
+    BOOTING.store(false, Ordering::SeqCst);
+}
+
+/// Fallback-page Retry button → kill stale children and boot again.
+#[tauri::command]
+fn boot_retry(app: AppHandle) {
+    show_main(&app);
+    std::thread::spawn(move || boot_task(app));
 }
 
 // ---------------------------------------------------------------------------
@@ -253,11 +346,7 @@ fn forward_media_event(app: &AppHandle, ev: MediaControlEvent) {
         MediaControlEvent::SetVolume(v) => json!({"type": "volume", "volume": v}),
         _ => return,
     };
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.eval(&format!(
-            "window.dispatchEvent(new CustomEvent('tsf-media-command', {{ detail: {detail} }}))"
-        ));
-    }
+    post_media_command(app, detail);
 }
 
 fn init_media_controls(app: &AppHandle) {
@@ -277,9 +366,12 @@ fn init_media_controls(app: &AppHandle) {
 /// Web → native IPC. The web UI sends playback metadata/state; we project it
 /// onto the OS Now Playing surface (lockscreen / Control Center / media keys).
 #[tauri::command]
-fn media_update(app: AppHandle, cmd: String, payload: Value) {
+fn media_update(app: AppHandle, cmd: String, payload: serde_json::Value) {
+    // NOTE: `app` is used twice (moved into the closure AND for
+    // run_on_main_thread) — clone first or this is E0382.
+    let app_in = app.clone();
     let run = move || {
-        let state = app.state::<MediaState>();
+        let state = app_in.state::<MediaState>();
         let mut guard = match state.controls.0.lock() {
             Ok(g) => g,
             Err(_) => return,
@@ -289,24 +381,24 @@ fn media_update(app: AppHandle, cmd: String, payload: Value) {
             "metadata" => {
                 let duration = payload
                     .get("duration")
-                    .and_then(Value::as_f64)
+                    .and_then(|v| v.as_f64())
                     .filter(|d| *d > 0.0)
                     .map(Duration::from_secs_f64);
                 let m = MediaMetadata {
-                    title: payload.get("title").and_then(Value::as_str),
-                    artist: payload.get("artist").and_then(Value::as_str),
-                    album: payload.get("album").and_then(Value::as_str),
-                    cover_url: payload.get("artworkUrl").and_then(Value::as_str),
+                    title: payload.get("title").and_then(|v| v.as_str()),
+                    artist: payload.get("artist").and_then(|v| v.as_str()),
+                    album: payload.get("album").and_then(|v| v.as_str()),
+                    cover_url: payload.get("artworkUrl").and_then(|v| v.as_str()),
                     duration,
                 };
                 let _ = controls.set_metadata(m);
             }
             "state" => {
                 let playing =
-                    payload.get("playing").and_then(Value::as_bool).unwrap_or(false);
+                    payload.get("playing").and_then(|v| v.as_bool()).unwrap_or(false);
                 let progress = payload
                     .get("position")
-                    .and_then(Value::as_f64)
+                    .and_then(|v| v.as_f64())
                     .map(|s| MediaPosition(Duration::from_secs_f64(s.max(0.0))));
                 let playback = if playing {
                     MediaPlayback::Playing { progress }
@@ -325,17 +417,251 @@ fn media_update(app: AppHandle, cmd: String, payload: Value) {
 }
 
 // ---------------------------------------------------------------------------
+// Native menu bar + dock menu + tray
+// ---------------------------------------------------------------------------
+
+/// Menu-bar ids → the same CustomEvent funnel the media keys use, so ONE web
+/// handler serves menu bar, dock, tray, headphones and lockscreen.
+fn handle_action_id(app: &AppHandle, id: &str) {
+    match id {
+        "tsf:playpause" => post_media_command(app, json!({"type": "toggle"})),
+        "tsf:next" => post_media_command(app, json!({"type": "next"})),
+        "tsf:previous" => post_media_command(app, json!({"type": "previous"})),
+        "tsf:stop" => post_media_command(app, json!({"type": "stop"})),
+        "tsf:seekback" => {
+            post_media_command(app, json!({"type": "seekby", "dir": "backward", "seconds": 10.0}))
+        }
+        "tsf:seekforward" => {
+            post_media_command(app, json!({"type": "seekby", "dir": "forward", "seconds": 10.0}))
+        }
+        "tsf:volup" => post_media_command(app, json!({"type": "voldelta", "delta": 0.05})),
+        "tsf:voldown" => post_media_command(app, json!({"type": "voldelta", "delta": -0.05})),
+        "tsf:lyrics" => post_ui_command(app, "toggle-lyrics"),
+        "tsf:queue" => post_ui_command(app, "open-queue"),
+        "tsf:reload" => reload_page(app),
+        "tsf:show" => show_main(app),
+        "tsf:retry" => {
+            show_main(app);
+            let h = app.clone();
+            std::thread::spawn(move || boot_task(h));
+        }
+        _ => {}
+    }
+}
+
+fn build_menus(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    // -- App menu (first submenu becomes the macOS app menu) -----------------
+    let app_sub = Submenu::new(app, "TSF Music", true)?;
+    app_sub.append(&PredefinedMenuItem::about(
+        app,
+        Some("About TSF Music"),
+        Some("AI music player with full-length streaming — every feature, 100% local."),
+    )?)?;
+    app_sub.append(&PredefinedMenuItem::separator(app)?)?;
+    app_sub.append(&PredefinedMenuItem::services(app)?)?;
+    app_sub.append(&PredefinedMenuItem::separator(app)?)?;
+    app_sub.append(&PredefinedMenuItem::hide(app)?)?;
+    app_sub.append(&PredefinedMenuItem::hide_others(app)?)?;
+    app_sub.append(&PredefinedMenuItem::show_all(app)?)?;
+    app_sub.append(&PredefinedMenuItem::separator(app)?)?;
+    app_sub.append(&PredefinedMenuItem::quit(app)?)?;
+
+    // -- File ----------------------------------------------------------------
+    let file_sub = Submenu::new(app, "File", true)?;
+    file_sub.append(&PredefinedMenuItem::close_window(app)?)?;
+
+    // -- Edit (copy/paste — REQUIRED for search fields) ----------------------
+    let edit_sub = Submenu::new(app, "Edit", true)?;
+    edit_sub.append(&PredefinedMenuItem::undo(app)?)?;
+    edit_sub.append(&PredefinedMenuItem::redo(app)?)?;
+    edit_sub.append(&PredefinedMenuItem::separator(app)?)?;
+    edit_sub.append(&PredefinedMenuItem::cut(app)?)?;
+    edit_sub.append(&PredefinedMenuItem::copy(app)?)?;
+    edit_sub.append(&PredefinedMenuItem::paste(app)?)?;
+    edit_sub.append(&PredefinedMenuItem::select_all(app)?)?;
+
+    // -- View ----------------------------------------------------------------
+    let view_sub = Submenu::new(app, "View", true)?;
+    view_sub.append(&MenuItem::with_id(
+        app,
+        "tsf:reload",
+        "Reload",
+        true,
+        Some("CmdOrCtrl+R"),
+    )?)?;
+    view_sub.append(&PredefinedMenuItem::fullscreen(app)?)?;
+    view_sub.append(&PredefinedMenuItem::separator(app)?)?;
+    view_sub.append(&MenuItem::with_id(
+        app,
+        "tsf:lyrics",
+        "Lyrics",
+        true,
+        Some("Alt+CmdOrCtrl+L"),
+    )?)?;
+    view_sub.append(&MenuItem::with_id(
+        app,
+        "tsf:queue",
+        "Queue",
+        true,
+        Some("Alt+CmdOrCtrl+Q"),
+    )?)?;
+
+    // -- Playback (the Spotify-desktop signature menu) ------------------------
+    let play_sub = Submenu::new(app, "Playback", true)?;
+    play_sub.append(&MenuItem::with_id(
+        app,
+        "tsf:playpause",
+        "Play/Pause",
+        true,
+        Some("Alt+CmdOrCtrl+P"),
+    )?)?;
+    play_sub.append(&MenuItem::with_id(
+        app,
+        "tsf:next",
+        "Next",
+        true,
+        Some("Alt+CmdOrCtrl+Right"),
+    )?)?;
+    play_sub.append(&MenuItem::with_id(
+        app,
+        "tsf:previous",
+        "Previous",
+        true,
+        Some("Alt+CmdOrCtrl+Left"),
+    )?)?;
+    play_sub.append(&MenuItem::with_id(app, "tsf:stop", "Stop", true, None::<&str>)?)?;
+    play_sub.append(&PredefinedMenuItem::separator(app)?)?;
+    play_sub.append(&MenuItem::with_id(
+        app,
+        "tsf:seekback",
+        "Seek Back 10s",
+        true,
+        None::<&str>,
+    )?)?;
+    play_sub.append(&MenuItem::with_id(
+        app,
+        "tsf:seekforward",
+        "Seek Forward 10s",
+        true,
+        None::<&str>,
+    )?)?;
+    play_sub.append(&PredefinedMenuItem::separator(app)?)?;
+    play_sub.append(&MenuItem::with_id(
+        app,
+        "tsf:volup",
+        "Volume Up",
+        true,
+        Some("Alt+CmdOrCtrl+Up"),
+    )?)?;
+    play_sub.append(&MenuItem::with_id(
+        app,
+        "tsf:voldown",
+        "Volume Down",
+        true,
+        Some("Alt+CmdOrCtrl+Down"),
+    )?)?;
+
+    // -- Window ---------------------------------------------------------------
+    let window_sub = Submenu::new(app, "Window", true)?;
+    window_sub.append(&PredefinedMenuItem::minimize(app)?)?;
+    window_sub.append(&PredefinedMenuItem::maximize(app)?)?;
+    window_sub.append(&PredefinedMenuItem::separator(app)?)?;
+    window_sub.append(&PredefinedMenuItem::bring_all_to_front(app)?)?;
+
+    let menu = Menu::new(app)?;
+    menu.append(&app_sub)?;
+    menu.append(&file_sub)?;
+    menu.append(&edit_sub)?;
+    menu.append(&view_sub)?;
+    menu.append(&play_sub)?;
+    menu.append(&window_sub)?;
+    Ok(menu)
+}
+
+/// Dock menu (macOS right-click on the Dock icon).
+#[cfg(target_os = "macos")]
+fn build_dock_menu(app: &AppHandle) -> tauri::Result<()> {
+    use tauri::menu::MenuBuilder;
+    let dock = MenuBuilder::new(app)
+        .item(&MenuItem::with_id(app, "tsf:show", "Show TSF Music", true, None::<&str>)?)
+        .separator()
+        .item(&MenuItem::with_id(app, "tsf:playpause", "Play/Pause", true, None::<&str>)?)
+        .item(&MenuItem::with_id(app, "tsf:next", "Next", true, None::<&str>)?)
+        .item(&MenuItem::with_id(app, "tsf:previous", "Previous", true, None::<&str>)?)
+        .build()?;
+    app.set_dock_menu(&dock)?;
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn build_dock_menu(_app: &AppHandle) -> tauri::Result<()> {
+    Ok(())
+}
+
+/// Menu-bar tray with quick transport controls (right-click menu; left-click
+/// focuses the app window).
+fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let tray_menu = Menu::new(app)?;
+    tray_menu.append(&MenuItem::with_id(
+        app,
+        "tsf:show",
+        "Show TSF Music",
+        true,
+        None::<&str>,
+    )?)?;
+    tray_menu.append(&PredefinedMenuItem::separator(app)?)?;
+    tray_menu.append(&MenuItem::with_id(
+        app,
+        "tsf:playpause",
+        "Play/Pause",
+        true,
+        None::<&str>,
+    )?)?;
+    tray_menu.append(&MenuItem::with_id(app, "tsf:next", "Next", true, None::<&str>)?)?;
+    tray_menu.append(&MenuItem::with_id(
+        app,
+        "tsf:previous",
+        "Previous",
+        true,
+        None::<&str>,
+    )?)?;
+    tray_menu.append(&PredefinedMenuItem::separator(app)?)?;
+    tray_menu.append(&MenuItem::with_id(
+        app,
+        "tsf:retry",
+        "Restart Engine…",
+        true,
+        None::<&str>,
+    )?)?;
+
+    TrayIconBuilder::with_id("tsf-tray")
+        .icon(Image::from_bytes(include_bytes!("../icons/32x32.png"))?)
+        .tooltip("TSF Music")
+        .menu(&tray_menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| handle_action_id(app, event.id().as_ref()))
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Entry
 // ---------------------------------------------------------------------------
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.unminimize();
-                let _ = w.set_focus();
-            }
+            show_main(app);
         }))
         .manage(ChildProcs {
             pot: Mutex::new(None),
@@ -343,11 +669,19 @@ pub fn run() {
             port: Mutex::new(0),
         })
         .manage(MediaState { controls: MediaCell(Mutex::new(None)) })
-        .invoke_handler(tauri::generate_handler![media_update])
+        .invoke_handler(tauri::generate_handler![media_update, boot_retry])
         .setup(|app| {
             let handle = app.handle().clone();
 
-            // 1) Loading window immediately (served from the bundled fallback
+            // 1) Native menu bar (App/File/Edit/View/Playback/Window).
+            let menu = build_menus(app)?;
+            app.set_menu(menu)?;
+
+            // 2) Dock menu + tray.
+            build_dock_menu(&handle)?;
+            build_tray(&handle)?;
+
+            // 3) Loading window immediately (served from the bundled fallback
             //    page — dark, TSF-styled) so the user never sees a blank dock.
             let win = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title("TSF Music")
@@ -357,12 +691,15 @@ pub fn run() {
                 .theme(Theme::Dark)
                 .build()?;
 
-            // 2) Now Playing / media keys — init on the main thread (setup runs
+            // 4) Now Playing / media keys — init on the main thread (setup runs
             //    there; MPRemoteCommandCenter requires it).
             init_media_controls(&handle);
 
-            // 3) Boot engine + POT provider in the background, then navigate.
-            std::thread::spawn(move || boot_and_navigate(handle, win));
+            // 5) Menu events → the single action funnel.
+            handle.on_menu_event(move |app, event| handle_action_id(app, event.id().as_ref()));
+
+            // 6) Boot engine + POT provider in the background, then navigate.
+            std::thread::spawn(move || boot_task(handle));
 
             Ok(())
         })
@@ -370,15 +707,7 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
-                let st = app.state::<ChildProcs>();
-                if let Some(mut p) = st.server.lock().unwrap().take() {
-                    let _ = p.kill();
-                    let _ = p.wait();
-                }
-                if let Some(mut p) = st.pot.lock().unwrap().take() {
-                    let _ = p.kill();
-                    let _ = p.wait();
-                }
+                kill_children(app);
             }
         });
 }
