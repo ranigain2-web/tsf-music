@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, Play, Wand2, Sparkles } from 'lucide-react'
+import { Search, Play, Wand2, Sparkles, Clock3, X } from 'lucide-react'
 import { usePlayer, type PlayerTrack } from '@/store/player'
 import { api, useNav } from '@/store/nav'
 import { TrackRow, AlbumCard, ArtistCard } from '@/components/shared'
@@ -31,6 +31,13 @@ const GENRES = [
 
 const RECENT_KEY = 'tsf-recent-searches'
 
+function persistRecent(next: string[]) {
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next))
+  } catch {}
+  return next
+}
+
 export function SearchView({ initialQuery }: { initialQuery?: string }) {
   const [query, setQuery] = useState(initialQuery ?? '')
   const [debounced, setDebounced] = useState(initialQuery ?? '')
@@ -41,6 +48,13 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
   const [aiOpen, setAiOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const playQueue = usePlayer((s) => s.playQueue)
+
+  const removeRecent = (r: string) => {
+    setRecent((prev) => persistRecent(prev.filter((x) => x !== r)))
+  }
+  const clearRecent = () => {
+    setRecent(persistRecent([]))
+  }
 
   useEffect(() => {
     try {
@@ -73,9 +87,7 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
         // save recent
         try {
           const prev = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]').filter((x: string) => x !== debounced)
-          const next = [debounced, ...prev].slice(0, 10)
-          localStorage.setItem(RECENT_KEY, JSON.stringify(next))
-          setRecent(next)
+          setRecent(persistRecent([debounced, ...prev].slice(0, 10)))
         } catch {}
       })
       .catch(() => !cancelled && setResults({ tracks: [], albums: [], artists: [], offline: true }))
@@ -134,27 +146,60 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
               <button
                 key={g.name}
                 onClick={() => setQuery(g.name)}
-                className="relative h-[110px] rounded-lg overflow-hidden text-left p-4 transition-transform hover:scale-[1.02]"
+                className="relative aspect-[8/7] rounded-lg overflow-hidden text-left p-4 transition-transform hover:scale-[1.02] active:scale-[0.98]"
                 style={{ background: `linear-gradient(135deg, ${g.colors[0]}, ${g.colors[1]})` }}
               >
-                <span className="text-lg font-bold text-white">{g.name}</span>
-                <div className="absolute -bottom-3 -right-3 w-[68px] h-[68px] rounded shadow-2xl rotate-[25deg]" style={{ background: g.colors[1] }} />
+                <span className="text-lg font-bold text-white leading-tight pr-6 block">{g.name}</span>
+                {/* Spotify signature: rotated album-art mock in the corner */}
+                <div
+                  className="absolute -bottom-1.5 -right-2 w-[64px] h-[64px] rounded-[4px] rotate-[25deg] shadow-[0_4px_24px_rgba(0,0,0,0.5)] origin-bottom-right"
+                  style={{
+                    background: `radial-gradient(circle at 30% 25%, rgba(255,255,255,0.45), rgba(255,255,255,0.08) 42%), linear-gradient(135deg, ${g.colors[1]}, ${g.colors[0]})`,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.18)',
+                  }}
+                  aria-hidden
+                />
               </button>
             ))}
           </div>
 
           {recent.length > 0 && (
             <div className="mt-8">
-              <h3 className="text-lg font-bold text-white mb-3">Recent searches</h3>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-lg font-bold text-white">Recent searches</h3>
+                <button
+                  onClick={clearRecent}
+                  className="text-[13px] font-bold text-[#a7a7a7] hover:text-white transition-colors px-3 h-8 rounded-full hover:bg-white/10"
+                >
+                  Clear all
+                </button>
+              </div>
+              {/* Spotify mobile anatomy: vertical rows with clock icon + per-row remove */}
+              <div>
                 {recent.map((r) => (
-                  <button
+                  <div
                     key={r}
+                    className="group flex items-center gap-3 h-12 px-2 -mx-2 rounded-md hover:bg-[#1f1f1f] transition-colors cursor-pointer"
                     onClick={() => setQuery(r)}
-                    className="px-4 h-9 rounded-full bg-white/10 hover:bg-white/20 text-sm text-white transition-colors"
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setQuery(r)
+                    }}
                   >
-                    {r}
-                  </button>
+                    <Clock3 size={18} className="text-[#b3b3b3] shrink-0" />
+                    <span className="flex-1 text-[15px] text-white truncate">{r}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeRecent(r)
+                      }}
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-[#a7a7a7] hover:text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity shrink-0"
+                      aria-label={`Remove recent search ${r}`}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -302,7 +347,7 @@ function TopResultCard({ artist }: { artist: YtmArtist }) {
       onClick={() => push({ type: 'artist', id: artist.browseId, title: artist.name })}
       className="cursor-pointer"
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
+      { }
       <img
         src={artist.thumbnail}
         alt={artist.name}

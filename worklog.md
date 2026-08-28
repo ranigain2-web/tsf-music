@@ -312,3 +312,25 @@ Stage Summary:
 - R2 pieces done: NP control order + green play + chevron-down + DOMINANT-COLOR LYRICS (Spotify's signature) + BAR-A tokens asserted live. The two most identity-defining mobile surfaces (home chips, NP screen) now match Spotify anatomy.
 - Next R2 remainder: mini-player exact h-84 spec + mini progress hairline, Library chips + 3-col grid, search Browse-all tiles; then R3 Capacitor iOS + workflows.
 - Risks: dominantColor depends on image CORS (yt3.googleusercontent + saavncdn send ACAO:*; jiosaavn 500x500 art confirmed working) — fallback keeps ambient wash, no breakage.
+
+---
+Task ID: 7
+Agent: Z.ai Code (cron R2 remainder — mini-player h84 + Library §2.6 + Search §2.7)
+Task: Complete the R2 remainder: mini-player exact h-84 + next button; Library Spotify-2023 rebuild (chips/search/sort/grid-list); Search browse tiles + recent-search rows. Status assessment + agent-browser QA first.
+
+Work Log:
+- Status: app healthy (dev 200, streams 206, POT provider alive uptime ~24min), lint clean → proceeded to R2 remainder.
+- QA measured BEFORE: mini bar h66 / art 44 — vs Spotify spec h84 / art 48 (BAR-B §2.2). Fixed:
+  1. MINI-PLAYER EXACT h-84 (NowPlayingBar.tsx): 2px progress + 82px content (art 48px r-4px, title/artist, pause, NEW next button — per §2.2 "pause + next"); removed non-Spotify heart + chevron from the bar (heart lives in NP screen). Browser-verified: barH=84 EXACT, artW=48, borderRadius 4px (official artwork rule), buttons = [Pause, Next track]. BAR-B §2.2 PASS.
+  2. LIBRARY REBUILD (LibraryView.tsx, BAR-B §2.6): header = title + search-toggle + grid/list-toggle + sort menu (DropdownMenu: Recents ✓/Alphabetical/Most songs — check-marked, #282828 panel); expanding search pill (h-8, bg #1f1f1f, radius 500) with live name filter across playlists AND history; filter chips All/Playlists/Recently played/Playback (Spotify chip style: active white/black, inactive #2a2a2a, role=tab/tablist, aria-selected); grid = compact 3-col mobile (aspect-square art r-4px + "Playlist • N songs" caption, no card box — 2023+ anatomy), list = h-64 rows w/ 48px art + hover delete; Liked Songs pinned purple tile first in both modes; Recently played renders as rows w/ hover play under All chip. Browser-verified: search filter "late" → 1 match + pinned Liked; list toggle renders rows + icon swaps; sort menu shows all 3 items w/ ✓.
+  3. SEARCH VIEW (SearchView.tsx, BAR-B §2.7): Browse-all tiles upgraded — aspect-[8/7] (taller), rotated 25° album-art mock w/ radial sheen + inset white ring + deep shadow (Spotify signature corner art); Recent searches converted pills → Spotify mobile vertical rows (Clock3 icon + query + per-row X remove on hover/focus + "Clear all" button; persistRecent helper; keyboard accessible rows). Browser-verified: searched "taylor swift" → cleared → Recent searches row renders w/ clock + X + Clear all.
+- BAR-A TOKEN ASSERTIONS (agent-browser eval, live): bodyBg #121212 EXACT; chip active white bg/black text; chip inactive rgb(42,42,42)=#2a2a2a EXACT; library grid 3 columns EXACT; tile play button rgb(30,215,96)=#1ed760 EXACT pill-shaped. ALL PASS.
+- Desktop 1440×900 sanity: library header/chips/grid/rows + desktop 3-zone player unaffected; recently-played rows keep touch-friendly always-visible play (globals @media(hover:none) — by design, matches Spotify mobile).
+- Lint: 0 errors (fixed 6 unused eslint-disable directives). dev.log: zero errors. Screenshots: tsf-analysis/qa/r2b-library-grid.png, r2b-library-list-sort.png, r2b-library-sortmenu.png, r2b-search-browse.png, r2b-search-recent.png, r2b-library-desktop.png.
+- Auto-advance re-verified in passing (Blank Space → Bad Blood after 30s preview, mini bar followed).
+
+Stage Summary:
+- BAR-B mobile anatomy status: §2.1 tabs ✅, §2.2 mini-player ✅ (h84 exact), §2.3 home chips ✅, §2.5 NP screen ✅ + lyrics dominant color ✅, §2.6 Your Library ✅ (chips+search+sort+grid/list+3-col), §2.7 Search ✅ (browse tiles + recent rows). Remaining §2.4/§2.8 polish: queue gestures (swipe-left remove / hold-drag reorder — QueuePanel exists, gestures not), lyrics share.
+- R2 IS NOW COMPLETE → next R3: Capacitor iOS platform + GitHub workflows (assembleDebug APK + unsigned IPA @ macos-15). Then R4 background audio/MediaSession plugins. Playback yield lever (cookies/residential) still open for 100% intl full-length.
+- Risks: none new; dominant-color lyrics CORS fallback unchanged.
+
