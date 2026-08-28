@@ -174,6 +174,9 @@ jobs:
         run: |
           APP="src-tauri/target/${{ matrix.target }}/release/bundle/macos/TSF Music.app"
           RES="$APP/Contents/Resources"
+          # absolutize: the server subshell cd's into the bundle, so a relative
+          # RES would break every path used after the cd (v0.1.1 smoke bug)
+          RES="$(cd "$RES" && pwd)"
           test -x "$RES/resources/runtime/bun" || { echo "::error::bundled bun missing/not executable"; exit 1; }
           test -f "$RES/resources/server/server.js" || { echo "::error::server.js missing in bundle"; exit 1; }
           test -f "$RES/resources/pot-provider/index.js" || { echo "::error::pot-provider missing"; exit 1; }
