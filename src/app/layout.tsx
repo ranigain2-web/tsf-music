@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: "TSF Music",
@@ -41,6 +42,7 @@ export default function RootLayout({
       <body className="antialiased bg-black text-white select-none">
         {children}
         <Toaster />
+        <SonnerToaster position="bottom-right" offset={96} />
       </body>
     </html>
   );

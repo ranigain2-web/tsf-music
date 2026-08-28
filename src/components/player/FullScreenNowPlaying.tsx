@@ -48,6 +48,7 @@ import { Slider } from '@/components/ui/slider'
 import { dominantColor } from '@/lib/color'
 import { SyncedLyrics } from './SyncedLyrics'
 import { QueuePanel } from './QueuePanel'
+import { useWakeLock } from '@/hooks/useWakeLock'
 import SourceBadge from './SourceBadge'
 
 export function FullScreenNowPlaying() {
@@ -84,6 +85,10 @@ export function FullScreenNowPlaying() {
   const smartShuffleLoading = usePlayer((s) => s.smartShuffleLoading)
   const toggleSmartShuffle = usePlayer((s) => s.toggleSmartShuffle)
   const applySmartShuffle = usePlayer((s) => s.applySmartShuffle)
+
+  // Keep the screen on while lyrics are up and music is playing —
+  // same behavior as Spotify's lyrics screen.
+  useWakeLock(lyricsOpen && isPlaying)
 
   const likes = useLibrary((s) => s.likes)
   const toggleLike = useLibrary((s) => s.toggleLike)

@@ -35,6 +35,12 @@
 import { useEffect, useRef } from 'react'
 import { usePlayer } from '@/store/player'
 import { setAudioHandle } from '@/store/audio'
+import {
+  nativeUpdateMetadata,
+  nativeUpdatePlaybackState,
+  nativeStop,
+  onNativeCommand,
+} from '@/lib/nativeMedia'
 
 /**
  * Touch devices (phones) stream through the Mac server (?proxy=1):
@@ -55,6 +61,8 @@ export function AudioEngine() {
   // (network change mid-session) surface as audio error 2/4; we re-resolve
   // with ?fresh=1 exactly once before declaring the track dead.
   const freshRetryRef = useRef(false)
+  // last time the native playback-state was pushed (1/s throttle)
+  const lastNativeStateRef = useRef(0)
   // ---- SponsorBlock "straight to the music" (Musify-ported) ----
   // Community-curated non-music segments (intros/outros/sponsor plugs) for
   // the CURRENT track. Empty for most studio recordings; when present the
@@ -107,6 +115,16 @@ export function AudioEngine() {
       }
       setPosition(audio.currentTime)
       updateMediaPositionState(audio)
+      // native lockscreen elapsed-time refresh (throttled to 1/s)
+      const now = Date.now()
+      if (now - lastNativeStateRef.current > 1000) {
+        lastNativeStateRef.current = now
+        nativeUpdatePlaybackState({
+          isPlaying: !audio.paused,
+          position: audio.currentTime,
+          duration: isFinite(audio.duration) ? audio.duration : 0,
+        })
+      }
     }
     const onDurationChange = () => {
       if (isFinite(audio.duration) && audio.duration > 0) {
@@ -154,10 +172,20 @@ export function AudioEngine() {
     const onPlay = () => {
       setIsPlaying(true)
       if (navigator.mediaSession) navigator.mediaSession.playbackState = 'playing'
+      nativeUpdatePlaybackState({
+        isPlaying: true,
+        position: audio.currentTime,
+        duration: isFinite(audio.duration) ? audio.duration : 0,
+      })
     }
     const onPause = () => {
       setIsPlaying(false)
       if (navigator.mediaSession) navigator.mediaSession.playbackState = 'paused'
+      nativeUpdatePlaybackState({
+        isPlaying: false,
+        position: audio.currentTime,
+        duration: isFinite(audio.duration) ? audio.duration : 0,
+      })
     }
     const onPlaying = () => {
       setLoading(false)
@@ -229,6 +257,36 @@ export function AudioEngine() {
     audio.addEventListener('error', onError)
     audio.addEventListener('ended', onEnded)
 
+    // native shell transport commands (lockscreen / headphone buttons) → store
+    const offNative = onNativeCommand((action, seekTime) => {
+      const s = usePlayer.getState()
+      switch (action) {
+        case 'play':
+          s.setIsPlaying(true)
+          break
+        case 'pause':
+          s.setIsPlaying(false)
+          break
+        case 'toggle':
+          s.setIsPlaying(!s.isPlaying)
+          break
+        case 'next':
+          s.next()
+          break
+        case 'previous':
+          s.prev()
+          break
+        case 'stop':
+          s.setIsPlaying(false)
+          break
+        case 'seekto':
+          if (typeof seekTime === 'number' && isFinite(seekTime)) seekTo(seekTime)
+          break
+        default:
+          break
+      }
+    })
+
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate)
       audio.removeEventListener('durationchange', onDurationChange)
@@ -242,6 +300,8 @@ export function AudioEngine() {
       audio.removeEventListener('volumechange', onVolumeChange)
       audio.removeEventListener('error', onError)
       audio.removeEventListener('ended', onEnded)
+      offNative()
+      nativeStop()
       setAudioHandle(null)
     }
   }, [])
@@ -262,6 +322,7 @@ export function AudioEngine() {
     pendingPlayRef.current = usePlayer.getState().isPlaying
     freshRetryRef.current = false // new track → retry budget restored
     setMediaSession(track)
+    nativeUpdateMetadata(track)
 
     // ---- SponsorBlock: fetch this track's non-music segments ----
     // Fire-and-forget in the background — playback starts regardless; if

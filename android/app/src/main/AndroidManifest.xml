@@ -32,12 +32,23 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- TSF: holds the MediaStyle notification + MediaSession so playback
+             survives backgrounding. Audio itself streams in the WebView. -->
+        <service
+            android:name=".MediaPlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- TSF: keep-awake for background audio playback (foreground service with
-         MediaSession controls lands with the native audio plugin). -->
+    <!-- TSF: keep-awake + media notification for background audio playback.
+         The audio streams in the WebView; the foreground service only holds
+         the MediaSession + lockscreen/notification controls. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>
