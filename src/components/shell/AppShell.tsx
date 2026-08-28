@@ -23,6 +23,7 @@ import { MobileNav } from '@/components/shell/MobileNav'
 import { ShortcutsOverlay } from '@/components/shell/ShortcutsOverlay'
 import { AudioEngine } from '@/components/player/AudioEngine'
 import { KeyboardShortcuts } from '@/components/shell/KeyboardShortcuts'
+import { useTauriUICommands } from '@/hooks/useTauriUICommands'
 import { useNav } from '@/store/nav'
 import { useLibrary } from '@/store/library'
 import { Views } from '@/components/views/Views'
@@ -30,6 +31,8 @@ import { Views } from '@/components/views/Views'
 export function AppShell() {
   const view = useNav((s) => s.view)
   const refreshLibrary = useLibrary((s) => s.refresh)
+  // native menu bar / tray → store (Tauri desktop shell only)
+  useTauriUICommands()
 
   useEffect(() => {
     void refreshLibrary()

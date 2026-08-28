@@ -159,7 +159,7 @@ export function onNativeCommand(handler: (action: string, seekTime?: number) => 
 
   if (isTauriShell()) {
     const listener = (e: Event): void => {
-      const detail = (e as CustomEvent<{ type?: string; seconds?: number }>).detail
+      const detail = (e as CustomEvent<{ type?: string; seconds?: number; dir?: string; volume?: number; delta?: number }>).detail
       if (!detail || typeof detail.type !== 'string') return
       switch (detail.type) {
         case 'play':
@@ -172,6 +172,20 @@ export function onNativeCommand(handler: (action: string, seekTime?: number) => 
           break
         case 'seekto':
           if (typeof detail.seconds === 'number') handler('seekto', detail.seconds)
+          break
+        case 'seekby':
+          // signed delta: backward is negative (from souvlaki SeekDirection)
+          if (typeof detail.seconds === 'number') {
+            const delta = detail.dir === 'backward' ? -detail.seconds : detail.seconds
+            handler('seekby', delta)
+          }
+          break
+        case 'volume':
+          if (typeof detail.volume === 'number') handler('volume', detail.volume)
+          break
+        case 'voldelta':
+          // menu-bar Volume Up/Down — signed delta around current volume
+          if (typeof detail.delta === 'number') handler('voldelta', detail.delta)
           break
         default:
           break

@@ -7,10 +7,14 @@
  * /api/ytm/lyrics. Auto-scrolls to keep the current line near the center,
  * with karaoke-style highlight. Manual scroll is respected for a few seconds
  * before auto-scroll resumes.
+ *
+ * §2.8 SHARE: floating share button (bottom-right) copies/shares the current
+ * lyric line with attribution — Spotify-parity "share this lyric" moment.
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Mic2 } from 'lucide-react'
+import { Loader2, Mic2, Share2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { usePlayer, type PlayerTrack } from '@/store/player'
 import { api } from '@/store/nav'
 
@@ -117,36 +121,77 @@ export function SyncedLyrics({ track }: { track: PlayerTrack }) {
   }
 
   const lines = lyrics?.lines || []
+
+  // §2.8 lyric share: current line + attribution. Web Share API (native sheet
+  // on mobile/desktop shells) → clipboard fallback, mirroring TrackContextMenu.
+  const currentLine = currentIdx >= 0 ? (lines[currentIdx]?.text || '').trim() : ''
+  const shareLyric = async (): Promise<void> => {
+    if (!currentLine) return
+    const text = `"${currentLine}"\n— ${track.title} · ${track.artistName}`
+    const shareData: ShareData = { text, title: `${track.title} — TSF Music` }
+    try {
+      if (typeof navigator.share === 'function') {
+        await navigator.share(shareData)
+        return
+      }
+      throw new Error('no-share')
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return // user closed sheet
+      try {
+        await navigator.clipboard.writeText(text)
+        toast.success('Lyric copied to clipboard')
+      } catch {
+        toast.error('Could not share this lyric')
+      }
+    }
+  }
+
   return (
-    <div
-      ref={scrollRef}
-      onScroll={onManualScroll}
-      className="w-full lg:w-[420px] xl:w-[480px] h-[420px] xl:h-[480px] rounded-lg bg-gradient-to-b from-black/15 to-black/35 backdrop-blur-[2px] overflow-y-auto py-[40%] px-6 text-center hide-scrollbar"
-    >
-      {lines.map((line, i) => {
-        const isCurrent = i === currentIdx
-        const distance = Math.abs(i - currentIdx)
-        const opacity = isCurrent ? 1 : Math.max(0.25, 1 - distance * 0.18)
-        const scale = isCurrent ? '1.05' : '1'
-        return (
-          <div
-            key={i}
-            ref={(el) => {
-              lineRefs.current[i] = el
-            }}
-            className="transition-all duration-500 ease-out py-1.5"
-            style={{
-              opacity,
-              transform: `scale(${scale})`,
-              color: isCurrent ? '#fff' : 'rgba(255,255,255,0.7)',
-              fontWeight: isCurrent ? 700 : 500,
-              textShadow: isCurrent ? '0 0 30px rgba(30,215,96,0.35)' : 'none',
-            }}
-          >
-            {line.text || '♪'}
-          </div>
-        )
-      })}
+    <div className="relative w-full lg:w-[420px] xl:w-[480px]">
+      <div
+        ref={scrollRef}
+        onScroll={onManualScroll}
+        className="w-full h-[420px] xl:h-[480px] rounded-lg bg-gradient-to-b from-black/15 to-black/35 backdrop-blur-[2px] overflow-y-auto py-[40%] px-6 text-center hide-scrollbar"
+      >
+        {lines.map((line, i) => {
+          const isCurrent = i === currentIdx
+          const distance = Math.abs(i - currentIdx)
+          const opacity = isCurrent ? 1 : Math.max(0.25, 1 - distance * 0.18)
+          const scale = isCurrent ? '1.05' : '1'
+          return (
+            <div
+              key={i}
+              ref={(el) => {
+                lineRefs.current[i] = el
+              }}
+              className="transition-all duration-500 ease-out py-1.5"
+              style={{
+                opacity,
+                transform: `scale(${scale})`,
+                color: isCurrent ? '#fff' : 'rgba(255,255,255,0.7)',
+                fontWeight: isCurrent ? 700 : 500,
+                textShadow: isCurrent ? '0 0 30px rgba(30,215,96,0.35)' : 'none',
+              }}
+            >
+              {line.text || '♪'}
+            </div>
+          )
+        })}
+      </div>
+      {currentLine !== '' && (
+        <button
+          type="button"
+          onClick={() => {
+            void shareLyric()
+          }}
+          aria-label={`Share lyric: ${currentLine.slice(0, 40)}`}
+          title="Share this lyric"
+          className="absolute bottom-4 right-4 z-10 h-9 min-w-[44px] px-3 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-white/90 hover:text-white hover:bg-black/80 hover:scale-[1.04] active:scale-95 transition-all inline-flex items-center justify-center gap-1.5 opacity-100 lg:opacity-60 lg:hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1ed760]/70"
+        >
+          <Share2 size={15} aria-hidden />
+          <span className="text-[11px] font-semibold tracking-wide hidden sm:inline">SHARE</span>
+        </button>
+      )}
     </div>
   )
 }
