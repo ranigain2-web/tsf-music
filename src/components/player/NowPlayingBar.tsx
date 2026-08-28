@@ -10,7 +10,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  ChevronUp,
   Play,
   Pause,
   SkipBack,
@@ -119,9 +118,11 @@ export function NowPlayingBar() {
   return (
     <>
       {/* ================= MOBILE compact bar (Spotify mini-player) =================
-       * Thin progress line on the top edge, art + title/artist + heart + play.
-       * Tapping the row opens the full-screen Now Playing. Shown below lg;
-       * the desktop three-zone bar below takes over at lg+. */}
+       * BAR-B §2.2 anatomy: hairline progress on the top edge, art 48px +
+       * title/artist + pause + next. Whole bar expands to Now Playing on tap.
+       * Total height EXACTLY 84px (2px progress + 82px content) to match the
+       * live-measured Spotify mobile mini-bar. Shown below lg; the desktop
+       * three-zone bar takes over at lg+. */}
       <motion.div
         initial={{ y: 80 }}
         animate={{ y: 0 }}
@@ -135,9 +136,9 @@ export function NowPlayingBar() {
           <div className="h-full bg-white transition-[width] duration-200 ease-linear" style={{ width: `${pct}%` }} />
         </div>
         <div
-          className="flex items-center gap-3 pl-3 pr-4 py-2.5 active:bg-white/5 transition-colors cursor-pointer"
+          className="flex items-center gap-3 px-3 h-[82px] active:bg-white/5 transition-colors cursor-pointer"
           onClick={(e) => {
-            // taps on real buttons (heart/play) shouldn't open the sheet
+            // taps on real buttons (play/next) shouldn't open the sheet
             if ((e.target as HTMLElement).closest('button')) return
             openNowPlaying()
           }}
@@ -151,7 +152,7 @@ export function NowPlayingBar() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.08 }}
               transition={{ duration: 0.28, ease: [0.2, 0, 0, 1] }}
-              className="w-11 h-11 object-cover rounded shadow-lg shrink-0"
+              className="w-12 h-12 object-cover rounded-[4px] shadow-lg shrink-0"
             />
           </AnimatePresence>
           <div className="min-w-0 flex-1">
@@ -162,19 +163,8 @@ export function NowPlayingBar() {
             <div className="text-[12px] text-[#b3b3b3] truncate">{track.artistName}</div>
           </div>
           <button
-            onClick={() => void toggleLike(track)}
-            className={`shrink-0 p-2.5 -mr-1 transition-transform active:scale-90 ${liked ? 'text-[#1ed760]' : 'text-[#b3b3b3]'}`}
-            aria-label={liked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
-          >
-            <Heart size={20} fill={liked ? 'currentColor' : 'none'} />
-          </button>
-          {/* draggable affordance (Spotify's chevron cue) */}
-          <span className="shrink-0 text-white/50 pointer-events-none" aria-hidden>
-            <ChevronUp size={18} />
-          </span>
-          <button
             onClick={toggle}
-            className="shrink-0 w-11 h-11 flex items-center justify-center text-white active:scale-90 transition-transform"
+            className="shrink-0 w-10 h-10 flex items-center justify-center text-white active:scale-90 transition-transform"
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
             {isLoading ? (
@@ -184,6 +174,13 @@ export function NowPlayingBar() {
             ) : (
               <Play size={26} fill="currentColor" className="translate-x-[1px]" />
             )}
+          </button>
+          <button
+            onClick={next}
+            className="shrink-0 w-10 h-10 flex items-center justify-center text-white active:scale-90 transition-transform -ml-1"
+            aria-label="Next track"
+          >
+            <SkipForward size={24} fill="currentColor" />
           </button>
         </div>
       </motion.div>
