@@ -24,7 +24,7 @@ import {
   Heart,
   ListMusic,
   Mic2,
-  X,
+  ChevronDown,
   MoreHorizontal,
   Loader2,
   Clock,
@@ -45,6 +45,7 @@ import { seekTo } from '@/store/audio'
 import { useLibrary } from '@/store/library'
 import { api, useNav } from '@/store/nav'
 import { Slider } from '@/components/ui/slider'
+import { dominantColor } from '@/lib/color'
 import { SyncedLyrics } from './SyncedLyrics'
 import { QueuePanel } from './QueuePanel'
 import SourceBadge from './SourceBadge'
@@ -93,10 +94,25 @@ export function FullScreenNowPlaying() {
   const [sleepMenuOpen, setSleepMenuOpen] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
   const [radioLoading, setRadioLoading] = useState(false)
+  const [domColor, setDomColor] = useState<string | null>(null)
   const streamArt = usePlayer((s) => s.streamArt)
 
   const bgImage = streamArt || track?.thumbnail?.replace('w120-h120', 'w600-h600').replace(/=w\d+-h\d+/, '=w600-h600') || '/icon.svg'
   const bigArt = streamArt || track?.thumbnail?.replace('w120-h120', 'w720-h720').replace(/=w\d+-h\d+/, '=w720-h720') || '/icon.svg'
+
+  // Spotify signature (BAR-B §2.6): the lyrics screen wears the dominant
+  // color of the album art. Extract client-side, cache per track.
+  useEffect(() => {
+    if (!open || !track) return
+    let cancelled = false
+    setDomColor(null)
+    dominantColor(bigArt).then((c) => {
+      if (!cancelled) setDomColor(c)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [open, track?.videoId, bigArt])
 
   // Esc to close
   useEffect(() => {
@@ -165,6 +181,13 @@ export function FullScreenNowPlaying() {
         aria-hidden
       />
       <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/35 to-black/70" aria-hidden />
+      {/* Spotify-dominant-color layer: fades in over the ambient wash when
+          lyrics are open (BAR-B §2.6 lyrics background) */}
+      <div
+        className={`absolute inset-0 transition-opacity duration-700 ${lyricsOpen && domColor ? 'opacity-100' : 'opacity-0'}`}
+        style={{ background: `linear-gradient(180deg, ${domColor || 'transparent'} 0%, #121212 115%)` }}
+        aria-hidden
+      />
 
       {/* top bar — safe-area aware (notch/Dynamic Island); drag handle zone */}
       <div
@@ -180,7 +203,8 @@ export function FullScreenNowPlaying() {
           aria-label="Close now playing"
           title="Close"
         >
-          <X size={28} />
+          {/* Spotify uses a chevron-down to collapse the full-screen player */}
+          <ChevronDown size={30} />
         </button>
         <div className="text-center">
           <div className="text-[11px] uppercase tracking-[0.16em] text-white/70 font-semibold">
@@ -392,7 +416,7 @@ export function FullScreenNowPlaying() {
             </button>
             <button
               onClick={toggle}
-              className="w-16 h-16 max-lg:w-[60px] max-lg:h-[60px] rounded-full bg-white text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-transform shadow-[0_8px_24px_rgba(0,0,0,0.5)]"
+              className="w-16 h-16 max-lg:w-[60px] max-lg:h-[60px] rounded-full bg-[#1ed760] text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-transform shadow-[0_8px_24px_rgba(0,0,0,0.5)]"
               aria-label={isPlaying ? 'Pause' : 'Play'}
             >
               {isLoading ? (
