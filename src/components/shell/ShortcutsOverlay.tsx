@@ -64,7 +64,7 @@ export function ShortcutsOverlay() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-[440px] gap-0 rounded-2xl border-white/10 bg-[#181818] p-0 overflow-hidden">
+      <DialogContent aria-describedby={undefined} className="max-w-[440px] gap-0 rounded-2xl border-white/10 bg-[#181818] p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center gap-2.5 text-lg font-bold tracking-tight">
             <span className="grid size-8 place-items-center rounded-lg bg-[#1ed760]/15 text-[#1ed760]">
