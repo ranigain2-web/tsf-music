@@ -1,0 +1,13 @@
+{
+  "appId": "com.tsf.music",
+  "appName": "TSF Music",
+  "webDir": "mobile-shell",
+  "server": {
+    "url": "http://10.125.110.1:3000",
+    "cleartext": true
+  },
+  "android": {
+    "allowUserZoom": false,
+    "backgroundColor": "#000000"
+  }
+}

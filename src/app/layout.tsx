@@ -1,38 +1,34 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "Z.ai Code Scaffold - AI-Powered Development",
-  description: "Modern Next.js scaffold optimized for AI-powered development with Z.ai. Built with TypeScript, Tailwind CSS, and shadcn/ui.",
-  keywords: ["Z.ai", "Next.js", "TypeScript", "Tailwind CSS", "shadcn/ui", "AI development", "React"],
-  authors: [{ name: "Z.ai Team" }],
+  title: "TSF Music",
+  description: "Music for every moment. Free streaming powered by the open web.",
+  applicationName: "TSF Music",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "TSF Music",
+  },
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icon-192.png", sizes: "192x192" }],
   },
-  openGraph: {
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
-    url: "https://chat.z.ai",
-    siteName: "Z.ai",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
-  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#000000",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -41,10 +37,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
-      >
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <body className="antialiased bg-black text-white select-none">
         {children}
         <Toaster />
       </body>
