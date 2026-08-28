@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"spotify_is\":\"image1\",\"confidence\":9,\"craft_image1\":9,\"craft_image2\":4,\"clone_giveaways\":[\"image2: 'Create playlist' button uses pill shape instead of Spotify's standard rounded rectangle\",\"image2: Typography for 'Your Library' and body text lacks the specific weight/letter-spacing of Spotify's Circular font\",\"image2: Cookie banner text alignment and padding are inconsistent with official UI standards\",\"image2: Navigation icons (Home/Search) are oversized relative to the Spotify logo\",\"image2: Background surface colors are a flat grey rather than the subtle dark gradients used in the real app\"]}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1787906856,
+  "id": "202608281647301532d0fdf2e84e17",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202608281647301532d0fdf2e84e17",
+  "usage": {
+    "completion_tokens": 128,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 974,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1102
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"spotify_is\":\"image2\",\"confidence\":9,\"craft_image1\":6,\"craft_image2\":8,\"clone_giveaways\":[\"image1: Search bar uses a solid white border instead of Spotify's subtle bottom-only line or pill shape\",\"image1: 'Top result' card uses a dark grey background with rounded corners, unlike the flat layout in official UI\",\"image1: Typography for song titles is too bold and lacks the refined weight hierarchy of official Spotify\",\"image1: Bottom navigation bar uses thick, heavy icons and labels that don't match the standard 24px icon grid\",\"image1: The green play button on the artist card is oversized and misaligned compared to official component specs\"]}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1787906880,
+  "id": "2026082816474993879127c7dd406d",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026082816474993879127c7dd406d",
+  "usage": {
+    "completion_tokens": 143,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 974,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1117
+  }
+}

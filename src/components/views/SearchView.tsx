@@ -31,6 +31,80 @@ const GENRES = [
 
 const RECENT_KEY = 'tsf-recent-searches'
 
+/* Real-cover genre tiles: fetch the top album match for each genre once and
+   swap the rotated corner mock for real artwork (Spotify browse cards use
+   photography, flat mocks read as "clone"). Staggered + session-cached so we
+   never fire 12 requests at once; failure keeps the gradient mock. */
+const browseArtCache = new Map<string, string | null>()
+
+function BrowseTile({
+  name,
+  colors,
+  onPick,
+  index,
+}: {
+  name: string
+  colors: [string, string]
+  onPick: () => void
+  index: number
+}) {
+  const [art, setArt] = useState<string | null | undefined>(browseArtCache.get(name))
+
+  useEffect(() => {
+    if (art !== undefined) return
+    let cancelled = false
+    const t = setTimeout(() => {
+      void api<{ albums?: { thumbnail?: string }[] }>(
+        `/api/ytm/search?q=${encodeURIComponent(name + ' essentials')}&filter=albums`
+      )
+        .then((r) => {
+          const thumb = r.albums?.find((a) => a.thumbnail)?.thumbnail ?? null
+          browseArtCache.set(name, thumb)
+          if (!cancelled) setArt(thumb)
+        })
+        .catch(() => {
+          browseArtCache.set(name, null)
+          if (!cancelled) setArt(null)
+        })
+    }, 120 * index) // stagger: avoids a burst of search calls on mount
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [art, name, index])
+
+  return (
+    <button
+      onClick={onPick}
+      className="relative aspect-[8/7] rounded-lg overflow-hidden text-left p-4 transition-transform hover:scale-[1.02] active:scale-[0.98]"
+      style={{ background: `linear-gradient(135deg, ${colors[0]}, ${colors[1]})` }}
+    >
+      <span className="text-lg font-bold text-white leading-tight pr-6 block">{name}</span>
+      {/* Spotify signature: rotated album art in the corner (real cover once loaded) */}
+      <div
+        className="absolute -bottom-1.5 -right-2 w-[64px] h-[64px] rounded-[4px] rotate-[25deg] shadow-[0_4px_24px_rgba(0,0,0,0.5)] origin-bottom-right overflow-hidden"
+        style={{
+          background: `radial-gradient(circle at 30% 25%, rgba(255,255,255,0.45), rgba(255,255,255,0.08) 42%), linear-gradient(135deg, ${colors[1]}, ${colors[0]})`,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.18)',
+        }}
+        aria-hidden
+      >
+        {art && (
+          <img
+            src={art}
+            alt=""
+            loading="lazy"
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = 'none'
+            }}
+          />
+        )}
+      </div>
+    </button>
+  )
+}
+
 function persistRecent(next: string[]) {
   try {
     localStorage.setItem(RECENT_KEY, JSON.stringify(next))
@@ -113,7 +187,7 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="What do you want to listen to?"
-            className="w-full h-12 rounded bg-[#242424] text-white placeholder:text-[#a7a7a7] pl-11 pr-4 text-sm outline-none focus:ring-1 focus:ring-white"
+            className="w-full h-12 rounded bg-[#242424] text-white placeholder:text-[#a7a7a7] pl-11 pr-4 text-sm outline-none ring-1 ring-transparent focus:ring-1 focus:ring-white/70 hover:bg-[#2a2a2a] focus:bg-[#2a2a2a] transition-colors"
           />
         </div>
       </div>
@@ -142,24 +216,8 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
 
           <h2 className="text-xl font-bold text-white mb-4">Browse all</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
-            {GENRES.map((g) => (
-              <button
-                key={g.name}
-                onClick={() => setQuery(g.name)}
-                className="relative aspect-[8/7] rounded-lg overflow-hidden text-left p-4 transition-transform hover:scale-[1.02] active:scale-[0.98]"
-                style={{ background: `linear-gradient(135deg, ${g.colors[0]}, ${g.colors[1]})` }}
-              >
-                <span className="text-lg font-bold text-white leading-tight pr-6 block">{g.name}</span>
-                {/* Spotify signature: rotated album-art mock in the corner */}
-                <div
-                  className="absolute -bottom-1.5 -right-2 w-[64px] h-[64px] rounded-[4px] rotate-[25deg] shadow-[0_4px_24px_rgba(0,0,0,0.5)] origin-bottom-right"
-                  style={{
-                    background: `radial-gradient(circle at 30% 25%, rgba(255,255,255,0.45), rgba(255,255,255,0.08) 42%), linear-gradient(135deg, ${g.colors[1]}, ${g.colors[0]})`,
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.18)',
-                  }}
-                  aria-hidden
-                />
-              </button>
+            {GENRES.map((g, i) => (
+              <BrowseTile key={g.name} name={g.name} colors={[g.colors[0], g.colors[1]]} index={i} onPick={() => setQuery(g.name)} />
             ))}
           </div>
 

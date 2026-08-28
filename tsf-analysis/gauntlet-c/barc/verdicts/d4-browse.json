@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"spotify_is\":\"image1\",\"confidence\":10,\"craft_image1\":9,\"craft_image2\":4,\"clone_giveaways\":[\"image2: search bar uses a generic white border instead of Spotify's pill-shaped, translucent container\",\"image2: category cards use flat gradients with identical placeholder shapes instead of high-fidelity album art photography\",\"image2: sidebar navigation lacks the specific iconography and 'Create' button hierarchy found in the official layout\",\"image2: typography for card titles appears to use a standard system font rather than Spotify's custom circular typeface\",\"image2: the bottom player bar is a crude approximation with misaligned icons and incorrect spacing compared to the real UI\"]}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1787906850,
+  "id": "202608281647242a3f191ed878482d",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202608281647242a3f191ed878482d",
+  "usage": {
+    "completion_tokens": 139,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 3534,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 3673
+  }
+}

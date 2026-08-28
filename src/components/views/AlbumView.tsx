@@ -12,6 +12,7 @@ import { useLibrary } from '@/store/library'
 import { useNav } from '@/store/nav'
 import { api } from '@/store/nav'
 import { TrackRow } from '@/components/shared'
+import { useDominantColor, withAlpha } from '@/hooks/useDominantColor'
 
 export function AlbumView({ id }: { id: string }) {
   const [data, setData] = useState<{ title: string; subtitle: string; thumbnail: string; tracks: PlayerTrack[]; offline: boolean } | null>(null)
@@ -34,6 +35,13 @@ export function AlbumView({ id }: { id: string }) {
       cancelled = true
     }
   }, [id])
+
+  // Hook called unconditionally (early returns below) — Spotify-signature hero tint
+  const thumbSafe = data?.thumbnail
+  const heroColor = useDominantColor(thumbSafe)
+  const heroSoft = withAlpha(heroColor, 0.72)
+  const heroFaint = withAlpha(heroColor, 0.3)
+  const heroGhost = withAlpha(heroColor, 0.12)
 
   if (loading && !data) {
     return (
@@ -68,8 +76,15 @@ export function AlbumView({ id }: { id: string }) {
 
   return (
     <div>
-      {/* hero */}
-      <header className="bg-gradient-to-b from-[#3d3d3d] to-[#1f1f1f] px-4 lg:px-6 pt-6 pb-6 flex gap-6 items-end">
+      {/* hero — wears the cover's dominant color, fading into #121212 */}
+      <header
+        className="px-4 lg:px-6 pt-6 pb-6 flex gap-6 items-end"
+        style={{
+          background: heroColor && heroSoft
+            ? `linear-gradient(to bottom, ${heroSoft}, ${withAlpha(heroColor, 0.92)})`
+            : undefined,
+        }}
+      >
         {thumbnail ? (
            
           <img src={thumbnail} alt={title} className="w-[140px] h-[140px] lg:w-[232px] lg:h-[232px] object-cover rounded shadow-[0_16px_48px_rgba(0,0,0,0.6)] shrink-0" />
@@ -95,7 +110,14 @@ export function AlbumView({ id }: { id: string }) {
       </header>
 
       {/* action bar */}
-      <div className="sticky top-0 z-10 bg-gradient-to-b from-[#1f1f1f] to-[#121212] px-4 lg:px-6 py-4 flex items-center gap-6">
+      <div
+        className="sticky top-0 z-10 px-4 lg:px-6 py-4 flex items-center gap-6 backdrop-blur-sm"
+        style={{
+          background: heroColor && heroSoft
+            ? `linear-gradient(to bottom, ${heroFaint}, ${heroGhost})`
+            : undefined,
+        }}
+      >
         <button
           onClick={() => playQueue(tracks, 0, title)}
           className="w-14 h-14 rounded-full bg-[#1ed760] text-black flex items-center justify-center hover:scale-105 hover:bg-[#3be477] active:scale-95 transition-transform shadow-xl"

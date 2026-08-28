@@ -1,0 +1,226 @@
+name: macOS App
+
+# Builds the native macOS shell (Tauri 2 + WKWebView) around the full
+# TSF Music engine, gated by a playback probe of the 20-track gauntlet set.
+#
+# Products (per architecture):
+#   - TSF-Music-<version>-x64.dmg      ← Intel (MacBook Pro 16" 2019 i9 ✓)
+#   - TSF-Music-<version>-arm64.dmg    ← Apple Silicon
+#   - matching .zip app bundles
+# Tag pushes (v*) additionally publish a GitHub Release — but ONLY if the
+# probe job passed (the gauntlet enforces itself).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "scripts/desktop/**"
+      - "prisma/**"
+      - "next.config.ts"
+      - "package.json"
+      - ".github/workflows/macos.yml"
+    tags: ["v*"]
+
+concurrency:
+  group: macos-app-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUN_VERSION: "1.3.4"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) Engine probe: boot the EXACT production engine (standalone + POT
+  #    provider + yt-dlp) on a clean machine and resolve the 20-track set.
+  # ---------------------------------------------------------------------------
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install deps
+        run: bun install
+
+      - name: Prisma generate + fresh database
+        run: |
+          bunx prisma generate
+          DATABASE_URL=file:/tmp/probe.db bunx prisma db push --skip-generate
+
+      - name: Install yt-dlp (zipapp) + deno (EJS solver)
+        run: |
+          sudo curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+          sudo chmod +x /usr/local/bin/yt-dlp
+          curl -fsSL https://deno.land/install.sh | sh -s -- -y
+          echo "$HOME/.deno/bin" >> "$GITHUB_PATH"
+
+      - name: Start POT provider (bgutil, :4416)
+        run: |
+          cd mini-services/pot-provider
+          bun install --production --backend copyfile
+          nohup env PORT=4416 bun index.js > /tmp/pot.log 2>&1 &
+
+      - name: Build engine (production standalone)
+        run: bun run build
+
+      - name: Start engine (:3100)
+        run: |
+          nohup env NODE_ENV=production PORT=3100 HOSTNAME=127.0.0.1 \
+            DATABASE_URL=file:/tmp/probe.db \
+            TSF_POT_URL=http://127.0.0.1:4416 \
+            bun .next/standalone/server.js > /tmp/server.log 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:3100/api/health > /dev/null 2>&1; then
+              echo "engine healthy after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::engine did not become healthy — server.log tail:"
+          tail -50 /tmp/server.log
+          exit 1
+
+      - name: Run 20-track playback probe
+        run: |
+          BASE=http://127.0.0.1:3100 PROBE_MIN_FULL="${PROBE_MIN_FULL:-50}" \
+            bun scripts/desktop/probe.mjs
+
+      - name: Upload probe report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsf-probe-report
+          path: probe-report.json
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # 2) Native shell build (both CPU architectures; Intel is the user's target)
+  # ---------------------------------------------------------------------------
+  build:
+    runs-on: macos-15
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            name: intel-x64
+          - target: aarch64-apple-darwin
+            name: apple-silicon
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Rust target for cross-compile
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Install deps + Prisma engines (darwin × both archs)
+        run: |
+          bun install
+          bunx prisma generate
+
+      - name: Build engine (production standalone)
+        run: bun run build
+
+      - name: Prepare bundled resources (bun runtime, deno, yt-dlp, pot-provider, db)
+        env:
+          BUN_VERSION: ${{ env.BUN_VERSION }}
+        run: bash scripts/desktop/prepare-mac-resources.sh ${{ matrix.target }}
+
+      - name: Tauri build (app bundle)
+        run: bunx tauri build --target ${{ matrix.target }} --bundles app
+
+      - name: Ad-hoc codesign (required to launch; notarization-ready)
+        run: |
+          APP="src-tauri/target/${{ matrix.target }}/release/bundle/macos/TSF Music.app"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP" && echo "codesign OK"
+
+      - name: Package DMG + zip
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          case "${{ matrix.target }}" in
+            x86_64-apple-darwin) ARCH=x64 ;;
+            aarch64-apple-darwin) ARCH=arm64 ;;
+          esac
+          APP="src-tauri/target/${{ matrix.target }}/release/bundle/macos/TSF Music.app"
+          STAGE=$(mktemp -d)
+          cp -R "$APP" "$STAGE/"
+          cp desktop/First-Run-MacOS.command "$STAGE/"
+          cp desktop/README-MACOS.md "$STAGE/README.txt"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "TSF-Music-${VERSION}-${ARCH}.zip"
+          hdiutil create -volname "TSF Music" -srcfolder "$STAGE" -ov -format UDZO \
+            "TSF-Music-${VERSION}-${ARCH}.dmg"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "ARCH=${ARCH}" >> "$GITHUB_ENV"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: TSF-Music-macos-${{ matrix.name }}
+          path: |
+            TSF-Music-*-x64.dmg
+            TSF-Music-*-arm64.dmg
+            TSF-Music-*-x64.zip
+            TSF-Music-*-arm64.zip
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # 3) Static checks: Rust compiles (linux cargo check) + lint + typecheck
+  # ---------------------------------------------------------------------------
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Lint + typecheck (web layer)
+        run: |
+          bun install
+          bun run lint
+          bunx tsc -p tsconfig.ci.json
+
+      - name: apt deps for Tauri (linux check)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev libssl-dev build-essential curl wget file
+
+      - name: cargo check (Rust shell)
+        run: cd src-tauri && cargo check --all-targets
+
+  # ---------------------------------------------------------------------------
+  # 4) Release (tags only) — gated by the probe gauntlet
+  # ---------------------------------------------------------------------------
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [probe, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.zip
+          generate_release_notes: true

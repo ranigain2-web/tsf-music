@@ -145,7 +145,7 @@ export function TrackRow({
         <div className="flex items-center gap-3 min-w-0">
           <Artwork src={track.thumbnail} alt="" className="w-10 h-10" iconSize={16} />
           <div className="min-w-0">
-            <div className={`truncate font-medium ${isCurrent ? 'text-[#1ed760]' : 'text-white'}`}>{track.title}</div>
+            <div className={`truncate font-normal ${isCurrent ? 'text-[#1ed760]' : 'text-white'}`}>{track.title}</div>
             <div className="truncate text-[13px] text-[#a7a7a7] group-hover:text-white transition-colors">
               {track.artistId ? (
                 <button
@@ -342,7 +342,7 @@ export function AlbumCard({
           </button>
         )}
       </div>
-      <div className="text-[15px] font-semibold text-white truncate">{name}</div>
+      <div className="text-base font-normal text-white truncate">{name}</div>
       <div className="text-[13px] text-[#a7a7a7] truncate mt-0.5">
         {year ? `${year} • ` : ''}
         {artist || 'Album'}
@@ -383,7 +383,7 @@ export function ArtistCard({
           iconSize={28}
         />
       </div>
-      <div className="text-[15px] font-semibold text-white truncate text-center">{name}</div>
+      <div className="text-base font-normal text-white truncate text-center">{name}</div>
       {subscribers && <div className="text-[13px] text-[#a7a7a7] truncate text-center mt-0.5">{subscribers}</div>}
     </div>
   )

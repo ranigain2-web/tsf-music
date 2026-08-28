@@ -380,3 +380,98 @@ Stage Summary:
 - R4 DONE (code-complete): both native shells now project playback to OS surfaces with transport commands back into the store; wake lock + keyboard shortcuts + share/toast features landed. The gauntlet half "background audio + lockscreen controls" is IMPLEMENTED on both platforms; runtime verification requires real devices (next lever after CI artifacts exist).
 - Unresolved: native code is compile-verified only by inspection (no Android SDK / Xcode in sandbox) — first GitHub Actions run may surface toolchain nits (e.g. MediaButtonNotificationComponent deprecation warnings, CAPPluginCall nullability); foreground-service start while app in background is blocked on Android 12+ (startForegroundService while-visible is our path — plugin starts it on metadata update which always happens in-foreground on user tap); POST_NOTIFICATIONS needs a runtime request on API 33+ (notification silently dropped if denied — playback still works).
 - Recommended next (R5): BAR-C blind screenshot comparison (12 refs vs our build, labels stripped, critic picks) — the UI is now anatomy-complete; loop builder/critic until ours wins. Then CI artifact round (needs git remote + secrets) and the 100%-full-length playback levers (cookies/residential, SabrStream+webpo).
+
+---
+Task ID: 10
+Agent: Z.ai Code (main — NEW MISSION: native macOS app via GitHub Actions)
+Task: User directive — package TSF-MUSIC as an efficient, native-as-possible macOS app for an Intel i9 MacBook Pro 16" 2019 running macOS 26 (Tahoe), built with GitHub Actions custom workflows, with EVERY feature (music + AI + library) working, plus the gauntlet-loop bars. Deep research → architecture decision → R-M1 scaffold + CI wiring + local proof.
+
+Work Log:
+- STATUS ASSESS: dev 200 / POT alive / lint+tsc clean / mobile R1-R4 complete per Tasks 5-9. No regressions.
+- DEEP RESEARCH (web-search, 4 queries): (1) Tauri vs Electron benchmark — Tauri ≈58% less memory, ~96% smaller bundle; performance-critical teams chose Tauri. (2) GitHub runners — macos-15-**intel** is deprecated AND pathologically slow (20h builds reported); correct path = build on macos-15 ARM with rust cross-target (x86_64-apple-darwin) or universal. (3) Tahoe 26 compatibility — MBP 16" 2019 i9 IS supported (one of only 4 Intel Macs). (4) Gatekeeper — Sequoia removed right-click→Open; Tahoe (26.2) reportedly even stricter; unsigned apps need System Settings "Open Anyway" OR quarantine strip (`xattr -cr`) — shipped a First-Run .command helper; optional notarization hooks documented.
+- ARCHITECTURE DECISION (researched + local evidence):
+    Tauri 2 (Rust, ~10MB shell) + WKWebView  ← native window, media keys, Now Playing
+    + bundled Bun runtime (per-arch official binary) running the EXISTING
+      Next standalone server (output:"standalone" already in next.config; `start`
+      script already ran it under bun = runtime identity proven in sandbox)
+    + bundled bgutil POT provider dir (native `canvas` dep → CANNOT bun-compile;
+      ship as dir + run under bundled bun with --backend copyfile, no symlinks)
+    + bundled yt-dlp_macos + deno (EJS) in resources/bin; PATH-prepended
+    + SQLite shipped as fresh schema db → copied to ~/Library/Application Support
+    Audio = HTML5 in WKWebView (app-process lifetime) + NSAppSleepDisabled
+    (App Nap off) → background audio; souvlaki → MPNowPlayingInfoCenter +
+    MPRemoteCommandCenter → lockscreen/Control Center/media keys.
+- R-M1 SCAFFOLD (all committed):
+    src-tauri/{Cargo.toml, build.rs, main.rs, lib.rs (engine+POT spawn, health
+    wait, port scan 8137+, single-instance, souvlaki media bridge,
+    media_update IPC command, child-kill on exit), tauri.conf.json (validated
+    against installed CLI schema; NSAppSleepDisabled+ATS in infoPlist;
+    resources globs; min macOS 10.15), capabilities/default.json,
+    www-fallback/index.html (dark boot screen + tsf-boot-error path),
+    icons/ (AI-generated 1024 icon → squircle mask via sharp → tauri icon icns/png/ico/android+ios sets)}
+- CI: .github/workflows/macos.yml — 4 jobs: (probe) boots REAL engine+POT on
+    ubuntu → 20-track gauntlet (scripts/desktop/probe.mjs, ≥50% full-length
+    gate, probe-report.json artifact); (build, matrix x64+arm64 on macos-15)
+    prepare-mac-resources.sh → tauri build --target → ad-hoc codesign --deep →
+    ditto zip + hdiutil UDZO dmg + First-Run command inside the DMG;
+    (check) eslint+tsc+cargo check on ubuntu-24.04 w/ webkit deps;
+    (release) tag-only, NEEDS probe+build → GH Release with both DMGs.
+- RESOLVER PORTABILITY: ytdlp.ts now honors TSF_YTDLP_BIN + TSF_DENO_DIR env
+  (bundle paths), POT already env (TSF_POT_URL). prisma schema += binaryTargets
+  [native, darwin, darwin-arm64] → generate VERIFIED both darwin engines
+  downloaded. prepare script force-copies engines + asserts both present.
+- SIDECHAIN BUGS FOUND & FIXED THIS ROUND:
+    (1) **BUILD-SCRIPT STATIC BUG (critical)**: with custom distDir
+        (.next-mac), standalone runtime expects static under
+        standalone/.next-mac/ (distDir is BAKED into server config) — old
+        script copied to standalone/.next/ → ALL _next chunks 404'd
+        (pages SSR'd fine, masking it). Fixed: cp into "$D/standalone/$D/".
+    (2) next.config.ts += distDir from TSF_DIST_DIR (isolated prod build —
+        never clobbers running dev server).
+    (3) .next-mac/ (+ src-tauri target/gen/resources) entered eslint scope →
+        736 false errors; added to eslint ignores → 0 errors 1 warning →
+        removed stale eslint-disable in SearchView (now 0/0).
+    (4) standalone file-tracing copies the WHOLE project root (285MB incl.
+        tsf-analysis/upload/db 24MB) → prepare script prunes to
+        server.js+package.json+node_modules+dist+public (~150MB est.).
+- LOCAL PROOF (BAR-M1 evidence, linux host): production build ✓ (route
+  manifest, all ƒ APIs); engine booted EXACTLY as the Rust shell will
+  (bun + env: PORT/DATABASE_URL/TSF_POT_URL/PATH) → /api/health 200, home
+  200, chunk 200, css 200 (after fix 1); missing-DB case proven (likes 500
+  on 0-byte file) → shipped fresh db is mandatory and implemented.
+- WEB LAYER BRIDGE: nativeMedia.ts rewritten to tri-backend
+  (Tauri via window.__TAURI_INTERNALS__ + __TAURI__.core.invoke('media_update'),
+  Capacitor unchanged, web no-op); onNativeCommand listens tsf-media-command
+  CustomEvents (play/pause/toggle/next/previous/stop/seekto).
+- QA: agent-browser — home renders (screenshot rm1-desktop-shell-qa.png);
+  real-click playback verified LIVE (audio t=17.5s, playing=true) after
+  nativeMedia/ytdlp edits; /api/stream 206 observed in dev.log. Known
+  automation limits (synthetic click autoplay block) documented previously.
+
+Stage Summary:
+- R-M1 (research + scaffold + CI wiring + local sidechain proof) COMPLETE.
+  The Mac app is now ONE git-push away: push to GitHub → macos.yml builds
+  TSF-Music-<v>-x64.dmg (Intel i9 2019 target) + arm64.dmg + zips as
+  artifacts; tag → gated release. Every TSF feature ships inside the bundle
+  (engine = the whole web app, 100% feature parity by construction) with
+  native window/media-keys/Now Playing added by the Rust shell.
+- BAR-M gauntlet (NEW, for desktop): BAR-M1 CI produces x64 dmg artifact +
+  probe job passes (≥50% full on datacenter baseline); BAR-M2 feature
+  matrix verified in-shell (engine identity + smoke on runner + docs);
+  BAR-M3 native integration (media keys/NP lockscreen/App-Nap-off/menu bar/
+  dock) implemented & code-checked; BAR-M4 blind screenshot critic vs
+  Spotify macOS at 1280×800 (loop until ours wins).
+- R-M queue: R-M2 = Rust shell polish round (native menu bar w/ Playback
+  section, dock menu, About panel, error-retry page, update-check stub) +
+  first CI run triage once remote exists. R-M3 = probe tuning (deno impact
+  A/B, threshold 50→70%), bundle size diet (prune du audit, deno
+  optional?). R-M4+ = BAR-M4 blind loop + feature additions (tray,
+  global shortcuts, lyrics keyboard nav already in web).
+- Risks: (a) tauri build on cross-target not yet run (no rust toolchain in
+  sandbox — the check job + first CI run will validate; Cargo written
+  conservatively w/ pinned major versions); (b) yt-dlp_macos is x86_64-only
+  → arm64 build runs it under Rosetta (documented; x64 dmg unaffected);
+  (c) souvlaki Send/Sync handled via MediaCell wrapper + main-thread-only
+  calls; (d) without deno on user Mac? — deno IS bundled now (resources/bin).
+  (e) AI features need ~/.z-ai-config on the Mac (documented in README;
+  graceful degradation otherwise).

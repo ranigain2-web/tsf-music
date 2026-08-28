@@ -1,0 +1,53 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "TSF Music",
+  "version": "0.1.0",
+  "identifier": "com.tsfmusic.desktop",
+  "build": {
+    "frontendDist": "www-fallback",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true,
+    "windows": [],
+    "security": {
+      "csp": null,
+      "capabilities": ["default"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "category": "Music",
+    "shortDescription": "AI music player with full-length streaming",
+    "longDescription": "TSF Music — a Spotify-class AI music player. Full-length streaming via a bundled playback engine, AI playlists, radio, lyrics, queue and library — 100% local.",
+    "copyright": "TSF Music",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "resources/bin/*",
+      "resources/runtime/*",
+      "resources/db/*",
+      "resources/pot-provider/**/*",
+      "resources/server/**/*"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "hardenedRuntime": false,
+      "infoPlist": {
+        "NSAppSleepDisabled": true,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        },
+        "NSHumanReadableCopyright": "TSF Music"
+      }
+    }
+  }
+}

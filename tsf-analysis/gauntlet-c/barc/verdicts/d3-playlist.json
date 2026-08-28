@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"spotify_is\":\"image2\",\"confidence\":10,\"craft_image1\":6,\"craft_image2\":9,\"clone_giveaways\":[\"image1: sidebar uses generic icons (Home, Search) instead of Spotify's specific navigation hierarchy\",\"image1: playlist header typography lacks the precise weight and tracking of Spotify's Circular font family\",\"image1: table row alignment is inconsistent, with action icons lacking the exact 16px grid spacing of the official UI\",\"image1: 'TSF Music' branding in top right and metadata indicates a third-party wrapper or clone origin\",\"image1: bottom player bar proportions and icon spacing are slightly compressed compared to the official spec\"]}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1787906843,
+  "id": "20260828164718a43231fad36a4f3a",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20260828164718a43231fad36a4f3a",
+  "usage": {
+    "completion_tokens": 135,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 3534,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 3669
+  }
+}

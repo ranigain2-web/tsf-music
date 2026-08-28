@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"spotify_is\":\"image1\",\"confidence\":9,\"craft_image1\":9,\"craft_image2\":5,\"clone_giveaways\":[\"image2: Cookie banner uses generic system font instead of Spotify's custom typeface (Circular)\",\"image2: 'Create playlist' and 'Browse podcasts' buttons use pill-shaped borders instead of Spotify's standard rounded rectangles\",\"image2: Navigation icons (Home, Search) are oversized and lack the precise 24px/44px hit-area proportions of the official app\",\"image2: Background surface colors are flat #121212 without the subtle elevation/layering seen in official UI components\",\"image2: Text line-heights and paragraph spacing in the empty state cards are inconsistent with Spotify's strict 4px/8px grid system\"]}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1787906906,
+  "id": "202608281648196d265cb878824c46",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202608281648196d265cb878824c46",
+  "usage": {
+    "completion_tokens": 157,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 974,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1131
+  }
+}

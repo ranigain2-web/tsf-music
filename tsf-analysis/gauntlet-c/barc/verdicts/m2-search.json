@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"spotify_is\":\"image2\",\"confidence\":9,\"craft_image1\":6,\"craft_image2\":8,\"clone_giveaways\":[\"image1: 'Your Library' header uses a generic sans-serif font instead of Spotify's custom Circular typeface\",\"image1: Cookie banner uses standard system font and lacks the specific rounded corners/spacing of official modals\",\"image1: Navigation icons (Home/Search) are oversized relative to the logo, breaking the 44px touch target consistency\",\"image1: Browse category cards have inconsistent aspect ratios and lack the subtle inner shadow/reflection of real cards\",\"image1: Footer links use incorrect line-height and font-weight compared to Spotify's legal text specifications\"]}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1787906869,
+  "id": "20260828164736a2a2b2e6b0dd45d6",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20260828164736a2a2b2e6b0dd45d6",
+  "usage": {
+    "completion_tokens": 141,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 974,
+    "prompt_tokens_details": {
+      "cached_tokens": 1
+    },
+    "total_tokens": 1115
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"spotify_is\":\"image2\",\"confidence\":10,\"craft_image1\":4,\"craft_image2\":9,\"clone_giveaways\":[\"image1: sidebar uses generic icons and lacks Spotify's specific 'Home/Search/Library' layout hierarchy\",\"image1: typography for section headers ('Your likes') is too bold/heavy compared to Spotify's lighter Circular/Circular Pro weight\",\"image1: playlist cards use flat, low-fidelity gradients that lack the subtle noise texture and lighting of official Spotify cards\",\"image1: bottom player bar alignment is off; progress bar and control buttons are misaligned with the track info block\",\"image1: footer text reveals third-party origins ('TSF Music', 'InnerTube', 'TSF AI') instead of Spotify's standard branding\"]}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1787906838,
+  "id": "2026082816471362aa35bfa128481f",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026082816471362aa35bfa128481f",
+  "usage": {
+    "completion_tokens": 155,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 3534,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 3689
+  }
+}

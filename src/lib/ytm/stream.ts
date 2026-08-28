@@ -337,6 +337,85 @@ export async function purgeVideoId(videoId: string) {
   memMap().delete(videoId)
 }
 
+// ---------- background full-length warmer ----------
+
+/**
+ * Deep Warm — idle background upgrade of preview/synth cache rows to
+ * full-length. The ranked cache short-circuits at the first hit, so a track
+ * that once resolved to a 30s preview NEVER re-attempts yt-dlp+POT until its
+ * row expires. warmStreams() forces a skipCache resolve for the given ids
+ * (sequential, capped, guarded) and lets cacheResult's upgrade side-effects
+ * (preview purge + upsert) promote full-length winners.
+ *
+ * Called by POST /api/stream/warm from the client when playback is stable —
+ * the gauntlet's "background warm converts replays to full-length" lever,
+ * automated instead of hoping for a manual replay after expiry.
+ */
+
+const FULL_LENGTH_PROVIDERS_RE = FULL_LENGTH_PROVIDERS
+const warmInFlight = new Set<string>()
+let lastWarmBatchAt = 0
+const WARM_BATCH_MIN_GAP_MS = 20_000
+
+export interface WarmOutcome {
+  id: string
+  provider: string
+  full: boolean
+  upgraded: boolean
+}
+
+export async function warmStreams(
+  rawIds: string[],
+  meta: Record<string, { title?: string; artist?: string; durationSec?: number }> = {},
+): Promise<{ warmed: WarmOutcome[]; skipped: number }> {
+  const ids = [...new Set(rawIds)]
+    .filter((id) => VIDEO_ID_RE.test(id))
+    .filter((id) => !warmInFlight.has(id))
+    .slice(0, 8)
+
+  // Global throttle: at most one batch per gap (client retries are cheap no-ops)
+  const now = Date.now()
+  if (ids.length === 0) return { warmed: [], skipped: rawIds.length }
+  if (now - lastWarmBatchAt < WARM_BATCH_MIN_GAP_MS) {
+    return { warmed: [], skipped: rawIds.length }
+  }
+  lastWarmBatchAt = now
+
+  const warmed: WarmOutcome[] = []
+  let skipped = 0
+
+  for (const id of ids) {
+    warmInFlight.add(id)
+    try {
+      // What does the cache hold right now? Fresh full-length rows need no work.
+      const current = (await cacheLookup(id)) || memGet(id)
+      if (
+        current &&
+        FULL_LENGTH_PROVIDERS_RE.test(current.provider) &&
+        current.expiresAt > Date.now() + 60_000
+      ) {
+        skipped++
+        continue
+      }
+      const before = current?.provider ?? null
+      // Force the full race (yt-dlp gets its fair wait; jiosaavn/innertube race too).
+      const result = await resolveStream(id, {
+        skipCache: true,
+        title: meta[id]?.title,
+        artist: meta[id]?.artist,
+        durationSec: meta[id]?.durationSec || 0,
+      })
+      const full = FULL_LENGTH_PROVIDERS_RE.test(result.provider)
+      warmed.push({ id, provider: result.provider, full, upgraded: full && before !== result.provider })
+    } catch {
+      /* one track failing must not stop the batch */
+    } finally {
+      warmInFlight.delete(id)
+    }
+  }
+  return { warmed, skipped }
+}
+
 // ---------- expiry ----------
 
 function computeExpiry(url: string): number {

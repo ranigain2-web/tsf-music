@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"spotify_is\":\"image2\",\"confidence\":10,\"craft_image1\":4,\"craft_image2\":9,\"clone_giveaways\":[\"image1: Sidebar uses generic icons (Home, Search, Library) instead of Spotify's specific navigation structure\",\"image1: Playlist cards use emoji and flat gradients instead of real album art or Spotify's dynamic canvas style\",\"image1: Typography lacks the specific weight/size hierarchy of Spotify's Circular Pro font family\",\"image1: 'Get started' CTA button is pill-shaped with incorrect border-radius compared to Spotify's standard buttons\",\"image1: Footer text reveals third-party data sources ('YouTube via InnerTube', 'TSF AI') instead of Spotify's proprietary metadata\"]}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1787906833,
+  "id": "20260828164706813c474983284fe3",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20260828164706813c474983284fe3",
+  "usage": {
+    "completion_tokens": 144,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 3534,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 3678
+  }
+}
