@@ -64,7 +64,18 @@ chmod +x "$RES/bin/deno"
 # 4) Next standalone server ---------------------------------------------------
 echo "▶ engine (standalone server)"
 [ -d "$ROOT/.next/standalone" ] || { echo "missing .next/standalone — run `bun run build` first" >&2; exit 1; }
-cp -R "$ROOT/.next/standalone" "$RES/server"
+# v0.1.1 BUGFIX: `cp -R src dst` with an EXISTING dst (created by mkdir -p
+# above) copies src INTO dst → standalone/ nested one level too deep → the
+# prune below then deleted the whole engine (shipped v0.1.0 had a server/
+# dir containing ONLY node_modules — the exact "engine did not become
+# healthy" failure). `src/.` copies the CONTENTS into the existing dir.
+cp -R "$ROOT/.next/standalone/." "$RES/server/"
+
+# Hard verifies: the engine layout is load-bearing — fail HERE, at pack time,
+# not 40 minutes later (or worse, on a user's Mac).
+[ -f "$RES/server/server.js" ] || { echo "::error::server.js missing after standalone copy" >&2; exit 1; }
+[ -f "$RES/server/package.json" ] || { echo "::error::package.json missing after standalone copy" >&2; exit 1; }
+[ -d "$RES/server/.next" ] || { echo "::error::.next missing after standalone copy" >&2; exit 1; }
 
 # Next's file tracing over-copies the project root (analysis dirs, archives,
 # sandbox-only artifacts). Runtime needs only: server.js, package.json,
