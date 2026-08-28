@@ -201,7 +201,7 @@ function ArtistCard({ artist, selected, onToggle }: { artist: ArtistGrid; select
     >
       <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-[#333] to-[#1a1a1a] shadow-[0_8px_24px_-8px_rgba(0,0,0,0.7)] ring-1 ring-white/5">
         {artist.thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element
+           
           <img
             src={artist.thumbnail}
             alt={artist.name}

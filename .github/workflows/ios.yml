@@ -1,0 +1,155 @@
+name: Build iOS IPA (unsigned)
+
+# TSF Music native shell factory (iOS).
+#
+# What it does:
+#   1. bakes the TSF server URL (secret TSF_SERVER_URL, overridable via
+#      workflow_dispatch input) into capacitor.config.json
+#   2. `cap sync ios` copies the shell + config into the committed ios/ project
+#      (Capacitor 8 SPM layout — Xcode resolves capacitor-swift-pm automatically,
+#      no CocoaPods involved)
+#   3. xcodebuild builds the Release .app for generic iOS devices with code
+#      signing DISABLED
+#   4. packages Payload/App.app → tsf-music-ios-unsigned.ipa and uploads it
+#      as an artifact
+#
+# Why unsigned: the sandbox repo holds no Apple distribution credentials.
+# The unsigned IPA is still fully useful — sideload tools (AltStore / Sideloadly /
+# Xcode's Devices window) re-sign on install, and an enterprise pipeline can
+# drop in `codesign` + provisioning later without touching this workflow's
+# structure (pass signing via the CODE_SIGN settings at the xcodebuild step).
+#
+# Why no `next build` here: identical reasoning to android.yml — the WebView
+# loads the app from the TSF server at runtime (server.url); the IPA only
+# ships the native shell + fallback page.
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: "TSF server URL baked into this IPA (overrides the repo secret)"
+        required: false
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - "mobile-shell/**"
+      - "capacitor.config.json"
+      - "assets/**"
+      - ".github/workflows/ios.yml"
+    tags:
+      - "v*"
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    runs-on: macos-15 # Xcode 16+/26 line — Capacitor 8 requires Xcode 16.4+
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── server URL resolution: dispatch input > repo secret > default ──
+      - name: Resolve server URL
+        id: srv
+        run: |
+          URL="${{ github.event.inputs.server_url }}"
+          if [ -z "$URL" ]; then URL="${{ secrets.TSF_SERVER_URL }}"; fi
+          if [ -z "$URL" ]; then URL="http://10.125.110.1:3000"; fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Baking server URL: $URL"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies (capacitor CLI)
+        run: bun install --frozen-lockfile
+
+      - name: Bake server URL into capacitor config
+        run: |
+          node -e '
+            const fs = require("fs");
+            const cfg = JSON.parse(fs.readFileSync("capacitor.config.json", "utf8"));
+            cfg.server = cfg.server || {};
+            cfg.server.url = process.env.TSF_SERVER_URL;
+            cfg.server.cleartext = String(cfg.server.url).startsWith("http://");
+            fs.writeFileSync("capacitor.config.json", JSON.stringify(cfg, null, 2) + "\n");
+            console.log("capacitor.config.json →", JSON.stringify(cfg.server));
+          '
+        env:
+          TSF_SERVER_URL: ${{ steps.srv.outputs.url }}
+
+      - name: Capacitor sync (copy shell + config into ios/)
+        run: bunx cap sync ios
+
+      - name: Show Xcode toolchain
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes | head -5
+
+      # ── build the device .app with signing disabled ──
+      # -target (not -scheme): the SPM template has no checked-in shared
+      # scheme, and `xcodebuild -target` needs none. Version stamps ride in
+      # as build-setting overrides — no pbxproj mutation needed.
+      - name: Build .app (Release, iphoneos, unsigned)
+        working-directory: ios
+        run: |
+          RUN="${{ github.run_number }}"
+          set -o pipefail
+          xcodebuild \
+            -project App/App.xcodeproj \
+            -target App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            MARKETING_VERSION=1.0.${RUN} \
+            CURRENT_PROJECT_VERSION=${RUN} \
+            build | tee build/xcodebuild.log | xcbeautify || {
+              echo "── xcodebuild failed; tail of raw log ──"
+              tail -80 build/xcodebuild.log
+              exit 1
+            }
+
+      - name: Verify .app output
+        run: |
+          APP=$(find ios/build/DerivedData/Build/Products -maxdepth 1 -name "*.app" | head -1)
+          test -n "$APP" || { echo "No .app produced"; exit 1; }
+          echo "Built: $APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :UIBackgroundModes" "$APP/Info.plist"
+          echo "app_path=$APP" >> "$GITHUB_ENV"
+
+      # ── package Payload/App.app → unsigned .ipa ──
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p ios/build/Payload
+          cp -R "${{ env.app_path }}" ios/build/Payload/
+          cd ios/build
+          zip -qry tsf-music-ios-unsigned.ipa Payload
+          ls -la tsf-music-ios-unsigned.ipa
+          # sanity: ipa must contain the binary + Info.plist
+          unzip -l tsf-music-ios-unsigned.ipa | rg "Payload/App.app/(App|Info.plist)"
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsf-music-ios-unsigned
+          path: ios/build/tsf-music-ios-unsigned.ipa
+          if-no-files-found: error
+
+      - name: Publish GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ios/build/tsf-music-ios-unsigned.ipa
+          generate_release_notes: true

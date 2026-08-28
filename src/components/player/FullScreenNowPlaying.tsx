@@ -317,10 +317,27 @@ export function FullScreenNowPlaying() {
 
       {/* main body */}
       <div className="relative flex-1 min-h-0 flex flex-col lg:flex-row lg:items-center lg:justify-center gap-6 px-6 lg:px-12 pb-12 max-lg:pb-[max(3rem,env(safe-area-inset-bottom))] pt-2">
-        {/* album art (or lyrics overlay when lyrics open) */}
-        <div className="flex-1 lg:flex-none flex items-center justify-center min-h-0">
+        {/* album art (or lyrics overlay when lyrics open) — shrinks when the
+            queue panel is open so the queue gets usable height on mobile */}
+        <div className={`flex items-center justify-center min-h-0 lg:flex-none ${queueOpen ? 'max-lg:flex-none max-lg:h-[160px]' : 'flex-1'}`}>
           {lyricsOpen ? (
             <SyncedLyrics track={track} />
+          ) : queueOpen ? (
+            <motion.div
+              key={track.videoId + '-q'}
+              initial={{ opacity: 0, scale: 0.92, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.45, ease: [0.2, 0, 0, 1] }}
+              className="h-full w-full flex items-center justify-center"
+            >
+              { }
+              <img
+                src={bigArt}
+                alt={track.title}
+                className="h-full aspect-square object-cover rounded-md shadow-[0_24px_80px_rgba(0,0,0,0.85)]"
+                referrerPolicy="no-referrer"
+              />
+            </motion.div>
           ) : (
             <motion.div
               key={track.videoId}
@@ -329,7 +346,7 @@ export function FullScreenNowPlaying() {
               transition={{ duration: 0.45, ease: [0.2, 0, 0, 1] }}
               className="w-full h-full flex items-center justify-center"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              { }
               <img
                 src={bigArt}
                 alt={track.title}
@@ -341,7 +358,7 @@ export function FullScreenNowPlaying() {
         </div>
 
         {/* right column: title + controls */}
-        <div className="flex-1 lg:flex-none lg:w-[480px] xl:w-[560px] flex flex-col gap-5 min-h-0">
+        <div className={`lg:flex-none lg:w-[480px] xl:w-[560px] flex flex-col gap-5 min-h-0 ${queueOpen ? 'max-lg:flex-[2.2]' : 'flex-1'}`}>
           {/* title row */}
           <div className="flex items-end gap-4">
             <div className="min-w-0 flex-1">

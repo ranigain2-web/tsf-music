@@ -240,12 +240,12 @@ export function HomeView() {
               <button
                 key={t.videoId + '-' + idx}
                 onClick={() => playQueue(quickPicks, idx, 'Quick picks')}
-                className="group flex items-center gap-2 h-[56px] max-lg:h-[52px] rounded-md bg-white/[0.08] hover:bg-white/20 transition-colors overflow-hidden text-left"
+                className="group flex items-center gap-1 h-[56px] max-lg:h-[52px] rounded-md bg-white/[0.08] hover:bg-white/20 transition-colors overflow-hidden text-left"
               >
-                <Artwork src={t.thumbnail} alt="" className="h-full w-12 max-lg:w-11 object-cover" iconSize={16} />
-                <span className="flex-1 min-w-0 text-[13px] lg:text-sm font-bold text-white line-clamp-1 pr-1">{t.title}</span>
-                <span className="card-play-btn mr-2 w-9 h-9 max-lg:w-8 max-lg:h-8 rounded-full bg-[#1ed760] text-black flex items-center justify-center shrink-0">
-                  <Play size={14} fill="currentColor" />
+                <Artwork src={t.thumbnail} alt="" className="h-full w-11 object-cover" iconSize={16} />
+                <span className="flex-1 min-w-0 text-[13px] lg:text-sm font-bold text-white line-clamp-1">{t.title}</span>
+                <span className="card-play-btn mr-1 w-8 h-8 rounded-full bg-[#1ed760] text-black flex items-center justify-center shrink-0">
+                  <Play size={13} fill="currentColor" />
                 </span>
               </button>
             ))}

@@ -76,7 +76,7 @@ export function PlaylistView({ id }: { id: string }) {
     <div>
       <header className="bg-gradient-to-b from-[#3d3d3d] to-[#1f1f1f] px-4 lg:px-6 pt-8 pb-6 flex gap-6 items-end">
         {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
+           
           <img src={cover} alt="" className="w-[140px] h-[140px] lg:w-[232px] lg:h-[232px] object-cover rounded shadow-[0_16px_48px_rgba(0,0,0,0.6)] shrink-0" />
         ) : (
           <div className="w-[140px] h-[140px] lg:w-[232px] lg:h-[232px] bg-[#282828] rounded flex items-center justify-center shrink-0">
@@ -186,7 +186,7 @@ export function PlaylistView({ id }: { id: string }) {
                       <Play size={14} fill="currentColor" />
                     </button>
                     <div className="flex items-center gap-3 min-w-0">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      { }
                       <img src={t.thumbnail} alt="" className="w-10 h-10 object-cover shrink-0" loading="lazy" />
                       <div className="min-w-0">
                         <div className="truncate font-medium text-white">{t.title}</div>

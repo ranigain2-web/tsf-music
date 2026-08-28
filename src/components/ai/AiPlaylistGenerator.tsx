@@ -271,7 +271,7 @@ export function AiPlaylistGenerator({
                     className="w-24 h-24 rounded-md shadow-xl shadow-black/50 overflow-hidden shrink-0"
                   >
                     {tracks[0]?.thumbnail ? (
-                      // eslint-disable-next-line @next/next/no-img-element
+                       
                       <img src={tracks[0].thumbnail} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-[#1ed760] to-[#0d73ec] flex items-center justify-center">
@@ -340,7 +340,7 @@ export function AiPlaylistGenerator({
                     >
                       <span className="text-[#7a7a7a] text-xs w-5 text-right tabular-nums">{i + 1}</span>
                       {t.thumbnail ? (
-                        // eslint-disable-next-line @next/next/no-img-element
+                         
                         <img src={t.thumbnail} alt="" className="w-9 h-9 rounded object-cover shrink-0" loading="lazy" />
                       ) : (
                         <div className="w-9 h-9 rounded bg-white/10 shrink-0" />
