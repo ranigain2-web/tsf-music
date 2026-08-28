@@ -41,16 +41,28 @@ import {
   nativeStop,
   onNativeCommand,
 } from '@/lib/nativeMedia'
+// MINDBEAT client instrumentation (self-initializing; additive, never blocks playback)
+import * as mb from '@/lib/mindbeat/client'
+import { consumePendingUserSkip } from '@/store/player'
 
 /**
- * Touch devices (phones) stream through the Mac server (?proxy=1):
- * same-origin bytes sidestep WebKit's cross-origin 307+Range fragility and
- * Android WebView CORS quirks. Desktop keeps the zero-load 307 redirect.
+ * Touch devices (phones) AND the native desktop shell stream through the
+ * server (?proxy=1): same-origin bytes sidestep WebKit's cross-origin
+ * 307+Range fragility (the #1 cause of mid-play stalls — WKWebView advances
+ * the media timeline in silence while a starved redirect target never
+ * delivers the next range) and Android WebView CORS quirks. The proxy also
+ * gives every client the server's self-heal ladder (403/416 → re-sign →
+ * retry) instead of leaving recovery to the audio element, which has none.
+ * Plain desktop browsers keep the zero-load 307 redirect.
  */
+declare global {
+  interface Window { __TAURI__?: unknown; __TAURI_INTERNALS__?: unknown }
+}
 function streamModeParam(): string {
-  if (typeof window !== 'undefined' && window.matchMedia?.('(hover: none), (pointer: coarse)').matches) {
-    return '&proxy=1'
-  }
+  if (typeof window === 'undefined') return ''
+  const isNativeShell = window.__TAURI__ !== undefined || window.__TAURI_INTERNALS__ !== undefined
+  const isTouch = window.matchMedia?.('(hover: none), (pointer: coarse)').matches
+  if (isNativeShell || isTouch) return '&proxy=1'
   return ''
 }
 
@@ -61,6 +73,27 @@ export function AudioEngine() {
   // (network change mid-session) surface as audio error 2/4; we re-resolve
   // with ?fresh=1 exactly once before declaring the track dead.
   const freshRetryRef = useRef(false)
+  // ---- STALL WATCHDOG (the "music stops but the timer keeps moving" fix) --
+  // WebKit/WKWebView advances the media timeline while the pipeline is
+  // starved: the elapsed counter climbs over silence. The watchdog samples
+  // the element every second and recovers when playhead progress OR buffer
+  // growth stops while `isPlaying` is asserted.
+  const stallTicksRef = useRef(0)
+  const lastWatchPosRef = useRef(-1)
+  const stallRecoveredRef = useRef(false)
+  // pending seek position for a mid-track fresh re-resolve (resume in place
+  // instead of restarting from 0:00)
+  const resumeAtRef = useRef<number | null>(null)
+  const recoveringRef = useRef(false)
+  // last listen-start wall clock + accumulated listen ms (real msPlayed for
+  // history — was always recorded as 0 before)
+  const listenStartRef = useRef<number | null>(null)
+  const listenAccumRef = useRef(0)
+  const prevVideoIdRef = useRef<string | null>(null)
+  // MINDBEAT: id of the track currently loaded + the surface context it
+  // STARTED with (consumed by the cleanup that emits TRACK_END/TRACK_SKIP)
+  const currentTrackIdRef = useRef<string | null>(null)
+  const trackCtxRef = useRef<{ id: string; ctx: mb.PlaybackContext } | null>(null)
   // last time the native playback-state was pushed (1/s throttle)
   const lastNativeStateRef = useRef(0)
   // ---- SponsorBlock "straight to the music" (Musify-ported) ----
@@ -137,6 +170,12 @@ export function AudioEngine() {
       if (isFinite(audio.duration) && audio.duration > 0) {
         setDuration(audio.duration)
       }
+      // Resume-in-place after a stall recovery: jump to where the listener
+      // actually was instead of restarting the track from 0:00.
+      if (resumeAtRef.current != null && isFinite(audio.duration)) {
+        try { audio.currentTime = Math.min(resumeAtRef.current, Math.max(0, audio.duration - 0.5)) } catch { /* seek before data — best effort */ }
+        resumeAtRef.current = null
+      }
       // If a play request was pending (waiting for bytes), fire it now.
       if (pendingPlayRef.current) {
         pendingPlayRef.current = false
@@ -171,6 +210,9 @@ export function AudioEngine() {
     }
     const onPlay = () => {
       setIsPlaying(true)
+      // listen-ms accounting: a fresh play run starts now (was playing →
+      // keep the accumulated ms from the earlier run)
+      if (listenStartRef.current == null) listenStartRef.current = Date.now()
       if (navigator.mediaSession) navigator.mediaSession.playbackState = 'playing'
       nativeUpdatePlaybackState({
         isPlaying: true,
@@ -180,6 +222,10 @@ export function AudioEngine() {
     }
     const onPause = () => {
       setIsPlaying(false)
+      if (listenStartRef.current != null) {
+        listenAccumRef.current += Date.now() - listenStartRef.current
+        listenStartRef.current = null
+      }
       if (navigator.mediaSession) navigator.mediaSession.playbackState = 'paused'
       nativeUpdatePlaybackState({
         isPlaying: false,
@@ -197,6 +243,75 @@ export function AudioEngine() {
     }
     const onWaiting = () => setLoading(true)
     const onStalled = () => setLoading(true)
+
+    // ---- STALL WATCHDOG TICK (1 Hz) -------------------------------------
+    // A stall = isPlaying asserted, element not paused, but (playhead frozen
+    // AND buffer not ahead) OR readyState dropped below HAVE_FUTURE_DATA for
+    // two consecutive samples. Recovery ladder: one in-place fresh
+    // re-resolve per track; a second stall on the same track skips forward.
+    const bufferedAhead = (el: HTMLAudioElement): number => {
+      try {
+        const b = el.buffered
+        for (let i = 0; i < b.length; i++) {
+          if (b.start(i) <= el.currentTime && el.currentTime <= b.end(i)) return b.end(i) - el.currentTime
+        }
+        if (b.length > 0) return b.end(b.length - 1) - el.currentTime
+      } catch { /* buffered API unavailable */ }
+      return 0
+    }
+    const recoverStall = (fromSec: number) => {
+      if (recoveringRef.current) return
+      recoveringRef.current = true
+      const s = usePlayer.getState()
+      const track = s.queue[s.queueIndex]
+      if (!track) return
+      setError('Reconnecting the stream…')
+      const dur = track.duration && isFinite(track.duration) ? `&dur=${Math.round(track.duration)}` : ''
+      const meta = `&title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artistName || '')}`
+      resumeAtRef.current = fromSec > 2 ? fromSec : null
+      pendingPlayRef.current = true
+      audio.src = `/api/stream?id=${encodeURIComponent(track.videoId)}${dur}${meta}&fresh=1${streamModeParam()}`
+      audio.load()
+      const p = audio.play()
+      if (p && typeof p.catch === 'function') p.catch(() => { /* retried on canplay */ })
+      // recoveringRef clears once the element proves it is delivering again
+      const prove = () => {
+        recoveringRef.current = false
+        stallTicksRef.current = 0
+        audio.removeEventListener('playing', prove)
+      }
+      audio.addEventListener('playing', prove)
+      setTimeout(() => { recoveringRef.current = false }, 15_000)
+    }
+    const watchTick = () => {
+      const s = usePlayer.getState()
+      if (!s.isPlaying || audio.paused || audio.ended) {
+        stallTicksRef.current = 0
+        lastWatchPosRef.current = audio.currentTime
+        return
+      }
+      const pos = audio.currentTime
+      const ahead = bufferedAhead(audio)
+      const moved = Math.abs(pos - lastWatchPosRef.current)
+      lastWatchPosRef.current = pos
+      const starving = audio.readyState < 3 // HAVE_CURRENT_DATA or worse
+      const frozen = moved < 0.04 && ahead < 0.7
+      if (starving || frozen) {
+        stallTicksRef.current += 1
+        if (stallTicksRef.current >= 3) {
+          if (!stallRecoveredRef.current) {
+            stallRecoveredRef.current = true
+            recoverStall(pos)
+          } else if (!recoveringRef.current) {
+            // already healed once and it stalled again — this stream is dead
+            setError('Stream kept breaking — skipping ahead')
+            s.next({ auto: true }) // engine-initiated → NOT a user skip
+          }
+        }
+      } else {
+        stallTicksRef.current = 0
+      }
+    }
     const onVolumeChange = () => {
       if (!usePlayer.getState().muted && Math.abs(usePlayer.getState().volume - audio.volume) > 0.01) {
         usePlayer.setState({ volume: audio.volume })
@@ -208,7 +323,8 @@ export function AudioEngine() {
       // 1=ABORTED 2=NETWORK_ERROR 3=DECODE_ERROR 4=SRC_NOT_SUPPORTED.
       // Codes 2/4 are the signature of a dead/expired redirect target
       // (e.g. IP-bound googlevideo URL cached before a network change).
-      // Recover transparently: re-resolve once, bypassing the cache.
+      // Recover transparently: re-resolve once, bypassing the cache,
+      // resuming at the position the listener was at.
       if ((code === 2 || code === 4) && !freshRetryRef.current) {
         freshRetryRef.current = true
         setError('Refreshing stream…')
@@ -217,6 +333,8 @@ export function AudioEngine() {
         if (track) {
           const dur = track.duration && isFinite(track.duration) ? `&dur=${Math.round(track.duration)}` : ''
           const meta = `&title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artistName || '')}`
+          const from = audio.currentTime
+          resumeAtRef.current = from > 2 ? from : null
           audio.src = `/api/stream?id=${encodeURIComponent(track.videoId)}${dur}${meta}&fresh=1${streamModeParam()}`
           audio.load()
           if (s.isPlaying || pendingPlayRef.current) {
@@ -231,16 +349,29 @@ export function AudioEngine() {
       // auto-skip after a short delay on stream failure
       setTimeout(() => {
         const s = usePlayer.getState()
-        if (s.isPlaying || s.isLoading) s.next()
+        if (s.isPlaying || s.isLoading) s.next({ auto: true }) // engine-initiated → NOT a user skip
       }, 1200)
     }
     const onEnded = () => {
-      const { repeat } = usePlayer.getState()
-      if (repeat === 'one') {
+      // Premature-end guard: a truncated upstream (proxy connection dropped,
+      // expired URL) can end the element at 40–90% while the provider was
+      // full-length. That is a stall wearing an 'ended' costume — heal it
+      // instead of betraying the listener with an instant next-track jump.
+      const s = usePlayer.getState()
+      const track = s.queue[s.queueIndex]
+      const expect = track?.duration && isFinite(track.duration) ? track.duration : 0
+      const at = audio.currentTime
+      const likelyTruncated = expect > 45 && at > 5 && at < expect * 0.88
+      if (likelyTruncated && !stallRecoveredRef.current) {
+        stallRecoveredRef.current = true
+        recoverStall(at)
+        return
+      }
+      if (s.repeat === 'one') {
         audio.currentTime = 0
         void audio.play()
       } else {
-        usePlayer.getState().next()
+        s.next({ auto: true }) // natural end → graded TRACK_END, not TRACK_SKIP
       }
     }
 
@@ -256,6 +387,15 @@ export function AudioEngine() {
     audio.addEventListener('volumechange', onVolumeChange)
     audio.addEventListener('error', onError)
     audio.addEventListener('ended', onEnded)
+    lastWatchPosRef.current = audio.currentTime
+    const watchdog = window.setInterval(watchTick, 1000)
+
+    // MINDBEAT: APP_BACKGROUND when the tab is hidden mid-session
+    // (only meaningful once a track has actually started)
+    const onVisForMindbeat = () => {
+      if (document.visibilityState === 'hidden' && currentTrackIdRef.current) mb.appBackground()
+    }
+    document.addEventListener('visibilitychange', onVisForMindbeat)
 
     // native shell transport commands (lockscreen / headphone buttons) → store
     const offNative = onNativeCommand((action, seekTime) => {
@@ -305,6 +445,9 @@ export function AudioEngine() {
     })
 
     return () => {
+      window.clearInterval(watchdog)
+      document.removeEventListener('visibilitychange', onVisForMindbeat)
+      mb.stopHeartbeats()
       audio.removeEventListener('timeupdate', onTimeUpdate)
       audio.removeEventListener('durationchange', onDurationChange)
       audio.removeEventListener('loadedmetadata', onLoadedMeta)
@@ -331,6 +474,15 @@ export function AudioEngine() {
     const track = queue[queueIndex]
     if (!track) return
 
+    prevVideoIdRef.current = track.videoId
+
+    // MINDBEAT: resolve the surface context for THIS track up front so the
+    // cleanup below can grade the leaving track with the context it started
+    // with (rec-source stamps win over the module playback context).
+    const startCtx = mb.resolveTrackContext(track.videoId)
+    trackCtxRef.current = { id: track.videoId, ctx: startCtx }
+    currentTrackIdRef.current = track.videoId
+
     usePlayer.getState().setLoading(true)
     usePlayer.getState().setError(null)
 
@@ -338,6 +490,12 @@ export function AudioEngine() {
     // we can retry when bytes arrive.
     pendingPlayRef.current = usePlayer.getState().isPlaying
     freshRetryRef.current = false // new track → retry budget restored
+    stallRecoveredRef.current = false // new track → one stall-heal budget
+    stallTicksRef.current = 0
+    recoveringRef.current = false
+    resumeAtRef.current = null
+    listenStartRef.current = usePlayer.getState().isPlaying ? Date.now() : null
+    listenAccumRef.current = 0
     setMediaSession(track)
     nativeUpdateMetadata(track)
 
@@ -363,6 +521,23 @@ export function AudioEngine() {
     audio.src = `/api/stream?id=${encodeURIComponent(track.videoId)}${dur}${meta}${streamModeParam()}`
     audio.load()
 
+    // MINDBEAT: TRACK_START for the new track + the 10s heartbeat loop
+    // (heartbeats fire only while playing — the getter returns null when paused).
+    mb.trackStart(
+      { videoId: track.videoId, artistId: track.artistId, artistName: track.artistName },
+      {
+        surface: startCtx.surface,
+        wasRecommended: startCtx.wasRecommended,
+        reasonCode: startCtx.reasonCode,
+        queuePosition: queueIndex,
+        duration: track.duration && isFinite(track.duration) && track.duration > 0 ? track.duration : undefined,
+      }
+    )
+    mb.startHeartbeats(
+      () => (usePlayer.getState().isPlaying ? currentTrackIdRef.current : null),
+      () => listenAccumRef.current + (listenStartRef.current != null ? Date.now() - listenStartRef.current : 0)
+    )
+
     // Optimistically call play() — most browsers will queue it. If the
     // promise rejects with AbortError (because load() interrupted), our
     // canplay/loadedmetadata handler will retry.
@@ -383,7 +558,70 @@ export function AudioEngine() {
         })
       }
     }
-     
+
+    // Flush the PREVIOUS track's real listened-ms into history (was always
+    // recorded as 0 — the number every downstream "how much did you play"
+    // feature needs). Runs on track change AND on unmount.
+    //
+    // READ THE REF, NOT A CLOSURE: React runs this cleanup BEFORE the next
+    // effect body advances prevVideoIdRef, so the ref IS the leaving track —
+    // a closure captured at body start is null for the first track after
+    // mount and loses that track's end event entirely (verified live).
+    return () => {
+      const leavingId = prevVideoIdRef.current
+      const stNow = usePlayer.getState()
+      const continuing = stNow.queue[stNow.queueIndex]
+      // Queue mutated but the SAME track keeps playing (smart-shuffle
+      // augmentation, queue reorder) — nothing is leaving, don't flush.
+      if (continuing && continuing.videoId === leavingId) return
+      if (leavingId) {
+        const ms = listenAccumRef.current + (listenStartRef.current != null ? Date.now() - listenStartRef.current : 0)
+        listenAccumRef.current = 0
+        listenStartRef.current = usePlayer.getState().isPlaying ? Date.now() : null
+        const at = audio.currentTime
+        const dur = isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0
+        // MINDBEAT: grade the leaving listen (TRACK_SKIP when notifyUserSkip()
+        // just fired — i.e. the user pressed next/prev). Additive to the
+        // history PATCH below; never blocks it.
+        if (ms > 250) {
+          const endCtx =
+            trackCtxRef.current && trackCtxRef.current.id === leavingId
+              ? trackCtxRef.current.ctx
+              : mb.getPlaybackContext()
+          // duration fallback chain: element → store track duration (synth
+          // streams can end without finite element metadata)
+          const st = usePlayer.getState()
+          const stTrack = st.queue[st.queueIndex]
+          const stLeaving = st.queue.find((t) => t.videoId === leavingId)
+          const durSec = dur > 0 ? dur : (stLeaving?.duration || stTrack?.duration || 0)
+          const durMs = durSec > 0 ? Math.round(durSec * 1000) : 0
+          const completionRatio = durMs > 0 ? Math.min(1, ms / durMs) : 0
+          // The store-carried flag (set synchronously inside next/prev's
+          // user path) is the reliable user-skip signal; the module flag is
+          // the fallback for any path that only had the lazy import.
+          const userSkip = consumePendingUserSkip()
+          mb.trackEnd(leavingId, {
+            listenedMs: Math.round(ms),
+            durationMs: durMs,
+            grade: mb.gradeOf(ms, durMs),
+            completionRatio,
+            skipBucket: mb.skipBucketOf(completionRatio),
+            wasRecommended: endCtx.wasRecommended,
+            reasonCode: endCtx.reasonCode,
+            surface: endCtx.surface,
+            forceType: userSkip ? 'TRACK_SKIP' : undefined,
+          })
+        }
+        if (ms > 1500) {
+          try {
+            const body = JSON.stringify({ videoId: leavingId, msPlayed: Math.round(ms), completed: dur > 0 && at >= dur * 0.9, lastPosition: Math.round(at) })
+            // PATCH (not sendBeacon — beacon always POSTs and would create a
+            // second history row). keepalive survives page unload.
+            fetch('/api/library/history', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {})
+          } catch { /* non-fatal */ }
+        }
+      }
+    }
   }, [queueIndex, queueVersion])
 
   // ---- Deep Warm: idle background full-length upgrades ----
@@ -546,6 +784,12 @@ function updateMediaPositionState(audio: HTMLAudioElement) {
 }
 
 export function seekTo(sec: number) {
+  // MINDBEAT: TRACK_SEEK (throttled to 1 per 2s inside the client module)
+  try {
+    const s = usePlayer.getState()
+    const tid = s.queueIndex >= 0 ? s.queue[s.queueIndex]?.videoId : undefined
+    if (tid) mb.seek(tid, Math.round((s.position || 0) * 1000), Math.round(sec * 1000))
+  } catch { /* instrumentation only */ }
   import('@/store/audio').then((m) => m.seekTo(sec))
 }
 

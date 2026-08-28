@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Home, Search, Library, Plus, Heart, Clock3, Wand2 } from 'lucide-react'
+import { Home, Search, Library, Plus, Heart, Clock3, Wand2, Dna } from 'lucide-react'
 import { useNav, type View } from '@/store/nav'
 import { useLibrary } from '@/store/library'
 import { usePlayer } from '@/store/player'
@@ -21,6 +21,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AiPlaylistGenerator } from '@/components/ai/AiPlaylistGenerator'
+import { TasteDNA } from '@/components/mindbeat/TasteDNA'
 import { Artwork } from '@/components/Artwork'
 
 export function Sidebar() {
@@ -31,6 +32,7 @@ export function Sidebar() {
   const current = usePlayer((s) => s.queue[s.queueIndex])
   const [createOpen, setCreateOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
+  const [tasteOpen, setTasteOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [createMenuOpen, setCreateMenuOpen] = useState(false)
 
@@ -107,6 +109,21 @@ export function Sidebar() {
               </div>
             )}
           </div>
+
+          {/* Taste DNA — transparency surface (near the AI generator entry) */}
+          <button
+            onClick={() => setTasteOpen(true)}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors hover:bg-[#1a1a1a]"
+            aria-label="Open Taste DNA — see and correct what the engine learned"
+          >
+            <span className="w-9 h-9 rounded-full bg-[#1ed760]/15 text-[#1ed760] flex items-center justify-center shrink-0">
+              <Dna size={18} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-white">Taste DNA</span>
+              <span className="block text-[12px] text-[#b3b3b3] truncate">What the engine learned</span>
+            </span>
+          </button>
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-0.5">
@@ -209,6 +226,9 @@ export function Sidebar() {
 
       {/* AI playlist generator */}
       <AiPlaylistGenerator open={aiOpen} onOpenChange={setAiOpen} />
+
+      {/* Taste DNA — MINDBEAT transparency surface */}
+      <TasteDNA open={tasteOpen} onOpenChange={setTasteOpen} />
     </>
   )
 }

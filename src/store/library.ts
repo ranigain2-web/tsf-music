@@ -74,6 +74,14 @@ export const useLibrary = create<LibraryState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ videoId: track.videoId, track }),
       })
+      // MINDBEAT: like/unlike are top-weight taste signals (ACTION_WEIGHTS.HEART)
+      if (wasLiked) {
+        void import('@/lib/mindbeat/client').then((m) => m.unlike(track.videoId))
+      } else {
+        void import('@/lib/mindbeat/client').then((m) =>
+          m.like(track.videoId, track.artistId, track.artistName, m.getPlaybackContext().surface)
+        )
+      }
     } catch {
       // revert
       set({ likes: likes })

@@ -26,6 +26,7 @@ import {
   Share2,
   Loader2,
   Check,
+  Ban,
 } from 'lucide-react'
 import {
   ContextMenu,
@@ -39,6 +40,9 @@ import { useLibrary } from '@/store/library'
 import { useNav } from '@/store/nav'
 import { toast } from 'sonner'
 import { AddToPlaylistDialog } from '@/components/player/AddToPlaylistDialog'
+// MINDBEAT: taste-feedback + download signals from the track menu
+import { download, notForMe, surfaceForNavView } from '@/lib/mindbeat/client'
+import { fetchMindbeatRadio } from '@/lib/radio-v2'
 
 export function TrackContextMenu({
   track,
@@ -53,6 +57,7 @@ export function TrackContextMenu({
   const likes = useLibrary((s) => s.likes)
   const toggleLike = useLibrary((s) => s.toggleLike)
   const push = useNav((s) => s.push)
+  const view = useNav((s) => s.view)
 
   const [addOpen, setAddOpen] = useState(false)
   const [downloadState, setDownloadState] = useState<'idle' | 'loading' | 'done'>('idle')
@@ -77,6 +82,10 @@ export function TrackContextMenu({
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
       setDownloadState('done')
+      // MINDBEAT: TRACK_DOWNLOAD is strong positive evidence (2.5×)
+      try {
+        download(track.videoId)
+      } catch { /* instrumentation only */ }
       setTimeout(() => setDownloadState('idle'), 2000)
     } catch {
       setDownloadState('idle')
@@ -87,6 +96,14 @@ export function TrackContextMenu({
     if (radioLoading) return
     setRadioLoading(true)
     try {
+      // RADIO V2: Mindbeat Decision Engine first (multi-seed + drift control
+      // + 7-day dedup); the raw InnerTube radio stays as the fallback.
+      const picks = await fetchMindbeatRadio(track, 25)
+      if (picks?.length) {
+        const tracks = picks[0]?.videoId === track.videoId ? picks : [track, ...picks]
+        playQueue(tracks, 0, `${track.title} · Radio`)
+        return
+      }
       const r = await fetch(`/api/ytm/radio?id=${encodeURIComponent(track.videoId)}`)
       if (!r.ok) throw new Error('radio failed')
       const j = (await r.json()) as { tracks?: PlayerTrack[] }
@@ -219,6 +236,26 @@ export function TrackContextMenu({
           </ContextMenuItem>
           <ContextMenuItem onClick={copyLink} className="gap-2.5 focus:bg-white/10">
             <Link2 size={14} /> Copy song link
+          </ContextMenuItem>
+
+          <ContextMenuSeparator className="bg-white/10" />
+
+          {/* MINDBEAT: explicit negative taste signal (−4.0 track evidence) —
+              the Decision Engine backs this artist/track off hard. */}
+          <ContextMenuItem
+            onClick={() => {
+              try {
+                notForMe(track.videoId, surfaceForNavView(view))
+                toast.success(
+                  track.artistName
+                    ? `Okay — we'll play less ${track.artistName}`
+                    : 'Got it — we\'ll tune your recommendations'
+                )
+              } catch { /* instrumentation only */ }
+            }}
+            className="gap-2.5 focus:bg-white/10"
+          >
+            <Ban size={14} /> Not for me
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>

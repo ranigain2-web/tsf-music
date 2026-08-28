@@ -11,9 +11,11 @@ import { useLibrary } from '@/store/library'
 import { api } from '@/store/nav'
 import { TrackRow } from '@/components/shared'
 import { useDominantColor, withAlpha } from '@/hooks/useDominantColor'
+// MINDBEAT: stamp AI-saved playlists' tracks so plays attribute to ai_playlist
+import { markQueueSource } from '@/lib/mindbeat/client'
 
 export function PlaylistView({ id }: { id: string }) {
-  const [pl, setPl] = useState<{ id: string; name: string; description?: string | null; tracks: PlayerTrack[] } | null>(null)
+  const [pl, setPl] = useState<{ id: string; name: string; description?: string | null; source?: string; tracks: PlayerTrack[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [recommended, setRecommended] = useState<PlayerTrack[]>([])
   const [loadingRecs, setLoadingRecs] = useState(false)
@@ -27,7 +29,7 @@ export function PlaylistView({ id }: { id: string }) {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    void api<{ playlist: { id: string; name: string; description?: string | null; tracks: PlayerTrack[] } }>(
+    void api<{ playlist: { id: string; name: string; description?: string | null; source?: string; tracks: PlayerTrack[] } }>(
       `/api/library/playlists?id=${encodeURIComponent(id)}`
     )
       .then((r) => !cancelled && setPl(r.playlist))
@@ -37,6 +39,16 @@ export function PlaylistView({ id }: { id: string }) {
       cancelled = true
     }
   }, [id])
+
+  // MINDBEAT: an AI-generated playlist opened by id (the generator's
+  // "Open playlist" path lands here) — stamp its tracks so TRACK_START
+  // attributes plays to ai_playlist with the FROM_YOUR_AI_MIX reason.
+  useEffect(() => {
+    if (!pl || pl.source !== 'ai' || !pl.tracks?.length) return
+    try {
+      markQueueSource(pl.tracks, 'ai_playlist', 'FROM_YOUR_AI_MIX')
+    } catch { /* instrumentation only */ }
+  }, [pl])
 
   // Fetch recommended songs based on the playlist's tracks
   useEffect(() => {
