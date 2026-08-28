@@ -112,7 +112,12 @@ echo "▶ pot-provider (production node_modules, copyfile — no symlinks in bun
   bun install --production --backend copyfile
 )
 cp "$ROOT/mini-services/pot-provider/index.js" "$RES/pot-provider/"
+cp -R "$ROOT/mini-services/pot-provider/build" "$RES/pot-provider/build"
 cp -R "$ROOT/mini-services/pot-provider/node_modules" "$RES/pot-provider/node_modules"
+# index.js requires './build/main.js' (committed TS output) — without the
+# build/ dir the POT provider dies instantly in the bundle (v0.1.0 bug #2,
+# invisible to CI because the probe runs pot from the repo checkout).
+[ -f "$RES/pot-provider/build/main.js" ] || { echo "::error::pot-provider build/main.js missing" >&2; exit 1; }
 
 # 6) Fresh database -----------------------------------------------------------
 echo "▶ database (schema-only sqlite)"
