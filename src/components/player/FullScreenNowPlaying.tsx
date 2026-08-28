@@ -34,11 +34,16 @@ import {
   VolumeX,
   Sparkles,
   Download,
+  User,
+  Disc3,
+  Radio,
+  Link2,
+  Check,
 } from 'lucide-react'
 import { usePlayer, fmtTime, type PlayerTrack } from '@/store/player'
 import { seekTo } from '@/store/audio'
 import { useLibrary } from '@/store/library'
-import { api } from '@/store/nav'
+import { api, useNav } from '@/store/nav'
 import { Slider } from '@/components/ui/slider'
 import { SyncedLyrics } from './SyncedLyrics'
 import { QueuePanel } from './QueuePanel'
@@ -81,10 +86,13 @@ export function FullScreenNowPlaying() {
 
   const likes = useLibrary((s) => s.likes)
   const toggleLike = useLibrary((s) => s.toggleLike)
+  const push = useNav((s) => s.push)
 
   const [scrubbing, setScrubbing] = useState(false)
   const [scrubPos, setScrubPos] = useState(0)
   const [sleepMenuOpen, setSleepMenuOpen] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
+  const [radioLoading, setRadioLoading] = useState(false)
   const streamArt = usePlayer((s) => s.streamArt)
 
   const bgImage = streamArt || track?.thumbnail?.replace('w120-h120', 'w600-h600').replace(/=w\d+-h\d+/, '=w600-h600') || '/icon.svg'
@@ -192,7 +200,68 @@ export function FullScreenNowPlaying() {
         >
           <MoreHorizontal size={28} />
           {sleepMenuOpen && (
-            <div className="absolute right-0 top-full mt-2 w-56 rounded-md bg-[#282828] border border-white/10 shadow-xl p-2 z-10">
+            <div className="absolute right-0 top-full mt-2 w-60 rounded-md bg-[#282828] border border-white/10 shadow-xl p-2 z-10">
+              {track.artistId && (
+                <button
+                  onClick={() => {
+                    push({ type: 'artist', id: track.artistId!, title: track.artistName })
+                    setSleepMenuOpen(false)
+                  }}
+                  className="flex w-full items-center gap-2.5 text-left px-3 py-1.5 text-sm text-white/90 hover:bg-white/10 rounded"
+                >
+                  <User size={14} /> Go to artist
+                </button>
+              )}
+              {track.albumId && (
+                <button
+                  onClick={() => {
+                    push({ type: 'album', id: track.albumId!, title: track.albumName })
+                    setSleepMenuOpen(false)
+                  }}
+                  className="flex w-full items-center gap-2.5 text-left px-3 py-1.5 text-sm text-white/90 hover:bg-white/10 rounded"
+                >
+                  <Disc3 size={14} /> Go to album
+                </button>
+              )}
+              <button
+                disabled={radioLoading}
+                onClick={async () => {
+                  if (radioLoading) return
+                  setRadioLoading(true)
+                  try {
+                    const r = await fetch(`/api/ytm/radio?id=${encodeURIComponent(track.videoId)}`)
+                    if (r.ok) {
+                      const j = (await r.json()) as { tracks?: PlayerTrack[] }
+                      const tracks = (j.tracks || []).filter((t) => t?.videoId)
+                      if (tracks[0]?.videoId !== track.videoId) tracks.unshift(track)
+                      if (tracks.length > 0) {
+                        usePlayer.getState().playQueue(tracks, 0, `${track.title} · Radio`)
+                        setSleepMenuOpen(false)
+                      }
+                    }
+                  } catch { /* keep menu open on failure */ } finally {
+                    setRadioLoading(false)
+                  }
+                }}
+                className="flex w-full items-center gap-2.5 text-left px-3 py-1.5 text-sm text-white/90 hover:bg-white/10 rounded disabled:opacity-60"
+              >
+                {radioLoading ? <Loader2 size={14} className="animate-spin" /> : <Radio size={14} />}
+                Start track radio
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(`https://music.youtube.com/watch?v=${track.videoId}`)
+                    setLinkCopied(true)
+                    setTimeout(() => setLinkCopied(false), 1800)
+                  } catch { /* clipboard unavailable */ }
+                }}
+                className="flex w-full items-center gap-2.5 text-left px-3 py-1.5 text-sm text-white/90 hover:bg-white/10 rounded"
+              >
+                {linkCopied ? <Check size={14} className="text-[#1ed760]" /> : <Link2 size={14} />}
+                {linkCopied ? 'Link copied' : 'Copy song link'}
+              </button>
+              <div className="border-t border-white/10 my-1.5" />
               <div className="text-[11px] uppercase tracking-wider text-white/40 px-3 py-1.5">Sleep timer</div>
               {[5, 10, 15, 30, 60].map((m) => (
                 <button

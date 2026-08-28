@@ -194,3 +194,23 @@ Stage Summary:
 - Known limitation (unchanged): datacenter IP → InnerTube full-length blocked by SABR → iTunes 30s preview is the ceiling for international tracks here; JioSaavn full-length works for Indian catalog; synth fallback intact.
 - Unresolved: SABR mitigation (P0 research), resolve latency 15-22s worst-case, remaining dead UI (More menus, PiP button, crossfade stub), Artwork component bypass in some views.
 - Recommended next: wire remaining dead buttons (More menu → context actions), AddToPlaylist from fullscreen player, drag-reorder persistence polish; then SABR research spike (serverAbrStreamingUrl).
+
+---
+Task ID: 3
+Agent: Z.ai Code (cron review round 2)
+Task: Assess status, browser QA, add features (context menu, More menu wiring, LikedView search/sort).
+
+Work Log:
+- Health assessment: app stable (54 resolves, 100% okRate, AI fast gateway, warm caches serving in ms)
+- FEATURE: Track right-click context menu — new src/components/player/TrackContextMenu.tsx wrapping every TrackRow with 10 Spotify-style actions: Play now (green), Play next, Add to queue, Save/Remove Liked Songs, Add to playlist…, Go to artist, Go to album, Start radio (NEW capability: /api/ytm/radio → 50-track queue), Download file, Copy song link. Browser-verified: all 10 menu items render on search results rows.
+- FEATURE: Start radio verified end-to-end — context "Blank Space · Radio", 50-track queue, auto-playing with prefetches (resolves 39→54, 100% ok).
+- REFACTOR: extracted AddToPlaylistDialog from shared.tsx into src/components/player/AddToPlaylistDialog.tsx (shared.tsx re-exports for compat) to break the shared↔TrackContextMenu circular import.
+- FEATURE: FullScreenNowPlaying More menu upgraded from sleep-timer-only to: Go to artist, Go to album, Start track radio (with loading spinner), Copy song link (with 1.8s "Link copied" check feedback), + existing sleep timer presets. Browser-verified all items render.
+- FEATURE: LikedView fully wired — live in-playlist search (pill input, Escape/clear, result counter), sort dropdown (Date added/Title/Artist/Duration with check marks), hero FAB becomes Pause when collection playing (Spotify-accurate), play resumes from current track if it belongs to the list. Browser-verified: typed "blank" → "1 result" → filtered row rendered.
+- QA: investigated transient "2 Issues" dev toast — stale hydration warning from intermediate fast-refresh states (fresh reload = clean, zero errors); fixed benign Radix aria-describedby warnings via aria-describedby={undefined} on AddToPlaylistDialog + ShortcutsOverlay DialogContent.
+- Lint: 0 errors. All API smoke green.
+
+Stage Summary:
+- App remains fully functional with 3 new feature surfaces: right-click context menus everywhere TrackRow renders (search/album/playlist/liked/history), real More menu in fullscreen player, real search/sort in Liked Songs.
+- QA screenshots: tsf-analysis/qa-08..13*.png (search songs, sort menu, context menu, radio queue, more menu, liked search).
+- Unresolved/next: PlaylistView still has dead More button (add same menu pattern), AiGeneratedView/AlbumView/ArtistView More buttons no-op, PiP button decorative, crossfade stub; P0 SABR research spike untouched; consider queue-context-menu (right-click queue rows) next.
