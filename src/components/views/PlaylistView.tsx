@@ -10,6 +10,7 @@ import { usePlayer, type PlayerTrack } from '@/store/player'
 import { useLibrary } from '@/store/library'
 import { api } from '@/store/nav'
 import { TrackRow } from '@/components/shared'
+import { useDominantColor, withAlpha } from '@/hooks/useDominantColor'
 
 export function PlaylistView({ id }: { id: string }) {
   const [pl, setPl] = useState<{ id: string; name: string; description?: string | null; tracks: PlayerTrack[] } | null>(null)
@@ -63,6 +64,14 @@ export function PlaylistView({ id }: { id: string }) {
     return () => { cancelled = true }
   }, [id, pl?.tracks.length])
 
+  // Spotify signature: header wears the cover's dominant color, fading into #121212.
+  // Hook is called unconditionally (React rules) — early returns stay below.
+  const coverSafe = pl?.tracks[0]?.thumbnail
+  const heroColor = useDominantColor(coverSafe)
+  const heroSoft = withAlpha(heroColor, 0.72)
+  const heroFaint = withAlpha(heroColor, 0.3)
+  const heroGhost = withAlpha(heroColor, 0.12)
+
   if (loading && !pl) {
     return <div className="p-6"><div className="h-[232px] bg-white/5 rounded animate-pulse" /></div>
   }
@@ -74,7 +83,14 @@ export function PlaylistView({ id }: { id: string }) {
 
   return (
     <div>
-      <header className="bg-gradient-to-b from-[#3d3d3d] to-[#1f1f1f] px-4 lg:px-6 pt-8 pb-6 flex gap-6 items-end">
+      <header
+        className="px-4 lg:px-6 pt-8 pb-6 flex gap-6 items-end"
+        style={{
+          background: heroColor && heroSoft
+            ? `linear-gradient(to bottom, ${heroSoft}, ${withAlpha(heroColor, 0.92)})`
+            : undefined,
+        }}
+      >
         {cover ? (
            
           <img src={cover} alt="" className="w-[140px] h-[140px] lg:w-[232px] lg:h-[232px] object-cover rounded shadow-[0_16px_48px_rgba(0,0,0,0.6)] shrink-0" />
@@ -94,7 +110,14 @@ export function PlaylistView({ id }: { id: string }) {
         </div>
       </header>
 
-      <div className="sticky top-0 z-10 bg-gradient-to-b from-[#1f1f1f] to-[#121212] px-4 lg:px-6 py-4 flex items-center gap-6">
+      <div
+        className="sticky top-0 z-10 px-4 lg:px-6 py-4 flex items-center gap-6 backdrop-blur-sm"
+        style={{
+          background: heroColor && heroSoft
+            ? `linear-gradient(to bottom, ${heroFaint}, ${heroGhost})`
+            : undefined,
+        }}
+      >
         <button
           onClick={() => pl.tracks.length && playQueue(pl.tracks, 0, pl.name)}
           className="w-14 h-14 rounded-full bg-[#1ed760] text-black flex items-center justify-center hover:scale-105 hover:bg-[#3be477] active:scale-95 transition-transform shadow-xl disabled:opacity-50"

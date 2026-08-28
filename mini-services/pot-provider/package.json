@@ -1,6 +1,6 @@
 {
   "name": "tsf-pot-provider",
-  "description": "bgutil POT provider mini-service for TSF-MUSIC (yt-dlp proof-of-origin tokens) \u2014 port 4416",
+  "description": "bgutil POT provider mini-service for TSF-MUSIC (yt-dlp proof-of-origin tokens) — port 4416",
   "license": "GPL-3.0-only",
   "type": "module",
   "contributors": [
@@ -45,5 +45,9 @@
   "allowScripts": {
     "canvas@3.2.3": true,
     "@swc/core@1.16.0": true
-  }
+  },
+  "trustedDependencies": [
+    "canvas",
+    "@swc/core"
+  ]
 }

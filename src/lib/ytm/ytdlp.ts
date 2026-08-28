@@ -42,10 +42,17 @@ const BINARY_PROBE_TTL_MS = 10 * 60 * 1000
  * valid fMP4). Set TSF_POT_URL to override; empty string disables.
  */
 const POT_PROVIDER_URL = process.env.TSF_POT_URL ?? 'http://127.0.0.1:4416'
-/** deno enables yt-dlp's EJS challenge solver (n-challenge) → more formats available. */
-const DENO_PATH = '/home/z/.deno/bin'
+/**
+ * deno enables yt-dlp's EJS challenge solver (n-challenge) → more formats
+ * available. Set via env so the macOS app bundle can point at its bundled
+ * copy (resources/bin/deno); the desktop shell also adds resources/bin to
+ * PATH. Empty string = feature off.
+ */
+const DENO_PATH = process.env.TSF_DENO_DIR ?? '/home/z/.deno/bin'
 
 const CANDIDATE_PATHS = [
+  // explicit override (desktop shells can point straight at the bundled copy)
+  ...(process.env.TSF_YTDLP_BIN ? [process.env.TSF_YTDLP_BIN] : []),
   '/home/z/.venv/bin/yt-dlp', // sandbox venv install (plugin + POT provider live here)
   '/usr/local/bin/yt-dlp',
   '/opt/homebrew/bin/yt-dlp',

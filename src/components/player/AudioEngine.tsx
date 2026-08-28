@@ -369,6 +369,54 @@ export function AudioEngine() {
      
   }, [queueIndex, queueVersion])
 
+  // ---- Deep Warm: idle background full-length upgrades ----
+  // When a track has been playing steadily for 10s, offer the server the
+  // current + next few queue ids. Tracks cached as 30s previews/synth get a
+  // full provider re-race (yt-dlp + POT hero path) so the NEXT play is
+  // full-length. Server-side guards (in-flight set, 20s batch gap) make
+  // repeat calls cheap no-ops.
+  const deepWarmDoneRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!isPlaying) return
+    const { queue, queueIndex } = usePlayer.getState()
+    const cur = queue[queueIndex]
+    if (!cur) return
+    if (deepWarmDoneRef.current === cur.videoId) return
+    const timer = setTimeout(() => {
+      const { queue: q, queueIndex: qi } = usePlayer.getState()
+      const upcoming = q.slice(qi, qi + 6)
+      if (!upcoming.length) return
+      deepWarmDoneRef.current = upcoming[0].videoId
+      const meta: Record<string, { title?: string; artist?: string; durationSec?: number }> = {}
+      for (const t of upcoming) {
+        meta[t.videoId] = {
+          title: t.title,
+          artist: t.artistName || undefined,
+          durationSec: t.duration && isFinite(t.duration) ? Math.round(t.duration) : 0,
+        }
+      }
+      fetch('/api/stream/warm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: upcoming.map((t) => t.videoId), meta }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j: { warmed?: Array<{ id: string; provider: string; full: boolean }> } | null) => {
+          const upgraded = (j?.warmed || []).filter((w) => w.full).length
+          if (upgraded > 0) {
+            // Upcoming tracks just became full-length in cache — refresh the
+            // prefetch pool so next-track handoff uses the upgraded URLs.
+            try {
+              const prefetch = (window as unknown as { __tsfPrefetch?: Map<string, unknown> }).__tsfPrefetch
+              prefetch?.clear?.()
+            } catch { /* optional hook only */ }
+          }
+        })
+        .catch(() => {})
+    }, 10_000)
+    return () => clearTimeout(timer)
+  }, [isPlaying, queueIndex, queueVersion])
+
   // ---- play / pause (toggle from UI) ----
   useEffect(() => {
     const audio = audioRef.current

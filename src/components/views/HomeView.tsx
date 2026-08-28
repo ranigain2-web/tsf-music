@@ -284,7 +284,7 @@ export function HomeView() {
                   <Sparkles size={20} fill="currentColor" />
                 </span>
               </div>
-              <div className="text-[15px] font-semibold text-white truncate">AI Playlist</div>
+              <div className="text-base font-normal text-white truncate">AI Playlist</div>
               <div className="text-[13px] text-[#a7a7a7] truncate mt-0.5">Generate from prompt</div>
             </button>
           </div>
@@ -503,7 +503,7 @@ function FeaturedCard({ card, name }: { card: FeaturedCard; name?: string }) {
           </button>
         )}
       </div>
-      <div className="text-[15px] font-semibold text-white truncate">{card.title}</div>
+      <div className="text-base font-normal text-white truncate">{card.title}</div>
       <div className="text-[13px] text-[#a7a7a7] truncate mt-0.5">{card.subtitle}</div>
       {name && (
         <div className="text-[10px] text-[#7a7a7a] uppercase tracking-wide mt-1">{name}</div>
@@ -534,7 +534,7 @@ function DailyMixCard({ mix, onPlay }: { mix: DailyMix; onPlay: () => void }) {
           <Play size={20} fill="currentColor" className="translate-x-[1px]" />
         </button>
       </div>
-      <div className="text-[15px] font-semibold text-white truncate">{mix.title}</div>
+      <div className="text-base font-normal text-white truncate">{mix.title}</div>
       <div className="text-[13px] text-[#a7a7a7] truncate mt-0.5">{mix.subtitle}</div>
     </div>
   )
@@ -576,7 +576,7 @@ function TrackChip({
           <Play size={20} fill="currentColor" className="translate-x-[1px]" />
         </button>
       </div>
-      <div className="text-[15px] font-semibold text-white truncate">{track.title}</div>
+      <div className="text-base font-normal text-white truncate">{track.title}</div>
       <div className="text-[13px] text-[#a7a7a7] truncate mt-0.5">{track.artistName}</div>
     </div>
   )

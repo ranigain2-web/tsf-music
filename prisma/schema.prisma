@@ -2,6 +2,10 @@
 
 generator client {
   provider = "prisma-client-js"
+  // darwin + darwin-arm64: the macOS app bundle is built on GitHub Actions and
+  // must carry query engines for BOTH Intel and Apple Silicon Macs regardless
+  // of which runner arch produced the build.
+  binaryTargets = ["native", "darwin", "darwin-arm64"]
 }
 
 datasource db {

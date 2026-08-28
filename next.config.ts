@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
     root: __dirname,
   },
   output: "standalone",
+  // Desktop (macOS/Linux) packaging builds into an ISOLATED dist dir so a
+  // production build never clobbers the .next dir of a running `next dev`.
+  distDir: process.env.TSF_DIST_DIR || ".next",
   // Hide the floating dev-tools indicator: it overlays the player bar and
   // intercepts clicks (and looks nothing like Spotify).
   devIndicators: false,

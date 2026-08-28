@@ -64,3 +64,10 @@ ios/DerivedData
 ios/App/output
 *.ipa
 *.xcarchive
+# desktop shell — build outputs (sources are committed)
+.next-mac/
+src-tauri/target/
+src-tauri/resources/
+src-tauri/gen/schemas/
+*.dmg
+probe-report.json
