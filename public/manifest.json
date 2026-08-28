@@ -1,0 +1,51 @@
+{
+  "name": "TSF Music",
+  "short_name": "TSF Music",
+  "id": "/",
+  "description": "Music for every moment. Free streaming powered by the open web.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "any",
+  "categories": [
+    "music",
+    "entertainment"
+  ],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Search",
+      "url": "/",
+      "description": "Jump into search"
+    },
+    {
+      "name": "Liked Songs",
+      "url": "/",
+      "description": "Your liked songs"
+    }
+  ]
+}
