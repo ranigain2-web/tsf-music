@@ -101,6 +101,7 @@ jobs:
         run: |
           RUN="${{ github.run_number }}"
           set -o pipefail
+          mkdir -p build
           xcodebuild \
             -project App/App.xcodeproj \
             -target App \
