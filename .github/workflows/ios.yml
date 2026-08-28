@@ -41,6 +41,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write # publish unsigned IPA on v* tags
+
 concurrency:
   group: ios-${{ github.ref }}
   cancel-in-progress: true
