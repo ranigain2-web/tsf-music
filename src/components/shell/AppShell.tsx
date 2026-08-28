@@ -22,6 +22,7 @@ import { QueueDrawer } from '@/components/player/QueueDrawer'
 import { MobileNav } from '@/components/shell/MobileNav'
 import { ShortcutsOverlay } from '@/components/shell/ShortcutsOverlay'
 import { AudioEngine } from '@/components/player/AudioEngine'
+import { KeyboardShortcuts } from '@/components/shell/KeyboardShortcuts'
 import { useNav } from '@/store/nav'
 import { useLibrary } from '@/store/library'
 import { Views } from '@/components/views/Views'
@@ -65,6 +66,9 @@ export function AppShell() {
 
       {/* keyboard shortcuts overlay (? key) */}
       <ShortcutsOverlay />
+
+      {/* global keyboard shortcuts (desktop) */}
+      <KeyboardShortcuts />
 
       {/* audio engine — no UI */}
       <AudioEngine />

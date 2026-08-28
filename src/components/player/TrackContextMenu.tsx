@@ -23,6 +23,7 @@ import {
   Radio,
   Download,
   Link2,
+  Share2,
   Loader2,
   Check,
 } from 'lucide-react'
@@ -36,6 +37,7 @@ import {
 import { usePlayer, type PlayerTrack } from '@/store/player'
 import { useLibrary } from '@/store/library'
 import { useNav } from '@/store/nav'
+import { toast } from 'sonner'
 import { AddToPlaylistDialog } from '@/components/player/AddToPlaylistDialog'
 
 export function TrackContextMenu({
@@ -100,10 +102,39 @@ export function TrackContextMenu({
     }
   }
 
-  const copyLink = async () => {
-    const url = `https://music.youtube.com/watch?v=${track.videoId}`
+  const trackUrl = () => `https://music.youtube.com/watch?v=${track.videoId}`
+
+  // Web Share API (native share sheet on mobile) → clipboard fallback.
+  // Spotify parity: share is a first-class row in the track menu.
+  const shareTrack = async () => {
+    const url = trackUrl()
+    const shareData = {
+      title: track.title,
+      text: `${track.title} — ${track.artistName}`,
+      url,
+    }
     try {
-      await navigator.clipboard.writeText(url)
+      if (typeof navigator.share === 'function') {
+        await navigator.share(shareData)
+        return
+      }
+      throw new Error('unsupported')
+    } catch (err) {
+      // user-cancelled share sheets abort with AbortError — stay silent
+      if ((err as DOMException)?.name === 'AbortError') return
+      try {
+        await navigator.clipboard.writeText(url)
+        toast.success('Link copied to clipboard')
+      } catch {
+        toast.error('Sharing is not available here')
+      }
+    }
+  }
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(trackUrl())
+      toast.success('Link copied to clipboard')
     } catch {
       /* clipboard unavailable — non-fatal */
     }
@@ -182,6 +213,9 @@ export function TrackContextMenu({
               <Download size={14} />
             )}
             Download file
+          </ContextMenuItem>
+          <ContextMenuItem onClick={shareTrack} className="gap-2.5 focus:bg-white/10">
+            <Share2 size={14} /> Share
           </ContextMenuItem>
           <ContextMenuItem onClick={copyLink} className="gap-2.5 focus:bg-white/10">
             <Link2 size={14} /> Copy song link

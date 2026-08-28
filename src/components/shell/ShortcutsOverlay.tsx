@@ -27,6 +27,7 @@ const GROUPS: { title: string; items: { keys: string[]; label: string }[] }[] = 
     items: [
       { keys: ['↑'], label: 'Volume up 5%' },
       { keys: ['↓'], label: 'Volume down 5%' },
+      { keys: ['M'], label: 'Mute / unmute' },
       { keys: ['?'], label: 'Show this overlay' },
       { keys: ['Esc'], label: 'Close overlays' },
     ],
