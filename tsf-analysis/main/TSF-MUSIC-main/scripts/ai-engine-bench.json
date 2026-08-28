@@ -1,0 +1,61 @@
+{
+  "runAt": "2026-08-28T02:30:17.253Z",
+  "stats": [
+    {
+      "model": "x-preview-f-free",
+      "http": 517,
+      "firstReason": -1,
+      "firstContent": -1,
+      "total": 517,
+      "songs": 0,
+      "validJson": false,
+      "err": "HTTP 401"
+    },
+    {
+      "model": "nemotron-3-ultra-free",
+      "http": 978,
+      "firstReason": -1,
+      "firstContent": 34273,
+      "total": 38147,
+      "songs": 25,
+      "validJson": true
+    },
+    {
+      "model": "hy3-free",
+      "http": 1811,
+      "firstReason": 1811,
+      "firstContent": -1,
+      "total": 26922,
+      "songs": 0,
+      "validJson": false
+    },
+    {
+      "model": "mimo-v2.5-free",
+      "http": 1794,
+      "firstReason": -1,
+      "firstContent": -1,
+      "total": 42608,
+      "songs": 0,
+      "validJson": false
+    },
+    {
+      "model": "muse-spark-1.2-contributor-free",
+      "http": 210,
+      "firstReason": -1,
+      "firstContent": -1,
+      "total": 210,
+      "songs": 0,
+      "validJson": false,
+      "err": "HTTP 403"
+    },
+    {
+      "model": "zai-glm",
+      "http": -1,
+      "firstReason": -1,
+      "firstContent": 11190,
+      "total": 11190,
+      "songs": 25,
+      "validJson": true
+    }
+  ]
+}

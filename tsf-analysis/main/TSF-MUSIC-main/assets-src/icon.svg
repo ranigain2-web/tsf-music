@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <!-- Deep black canvas with a subtle radial depth — matches the app's
+         ambient gradient aesthetic. -->
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0%" stop-color="#101010"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </radialGradient>
+    <!-- Signature TSF green with a lit-from-within vertical falloff. -->
+    <linearGradient id="note" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2cff7e"/>
+      <stop offset="55%" stop-color="#1ed760"/>
+      <stop offset="100%" stop-color="#14a94a"/>
+    </linearGradient>
+    <!-- Soft ambient glow behind the note. -->
+    <radialGradient id="glow" cx="50%" cy="45%" r="50%">
+      <stop offset="0%" stop-color="#1ed760" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#1ed760" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1024" height="1024" rx="0" fill="url(#bg)"/>
+  <circle cx="512" cy="480" r="360" fill="url(#glow)"/>
+
+  <!-- Beamed double eighth-note ("TSF" twin-note), bold geometry,
+       optically centered: the note mass sits slightly below center and the
+       beam reaches up — reads instantly at 48dp launcher size. -->
+  <g fill="url(#note)">
+    <!-- stems -->
+    <rect x="372" y="330" width="42" height="420"/>
+    <rect x="610" y="290" width="42" height="420"/>
+    <!-- beam (slight italic tilt for motion, like a waveform mid-bounce) -->
+    <path d="M 372 330 L 652 290 L 652 372 L 372 412 Z"/>
+    <!-- note heads (slightly tilted ellipses) -->
+    <ellipse cx="322" cy="738" rx="118" ry="88" transform="rotate(-16 322 738)"/>
+    <ellipse cx="560" cy="698" rx="118" ry="88" transform="rotate(-16 560 698)"/>
+  </g>
+
+  <!-- Equalizer accent — three thin bars rising from the baseline,
+   the "sound is live" signature. -->
+  <g fill="#1ed760" opacity="0.9">
+    <rect x="748" y="600" width="30" height="120" rx="15"/>
+    <rect x="798" y="540" width="30" height="180" rx="15"/>
+    <rect x="848" y="640" width="30" height="80" rx="15"/>
+  </g>
+</svg>

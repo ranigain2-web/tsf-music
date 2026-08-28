@@ -1,0 +1,15 @@
+import { chromium } from 'playwright'
+const browser = await chromium.launch({ headless: true, args: ['--autoplay-policy=no-user-gesture-required'] })
+const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
+const errors: string[] = []
+page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
+page.on('pageerror', (e) => errors.push(`PAGE: ${e.message}`))
+await page.goto('http://127.0.0.1:3000', { waitUntil: 'networkidle' })
+await page.waitForTimeout(3500)
+await page.screenshot({ path: '/home/z/my-project/upload/debug-nav-1.png' })
+console.log('URL:', page.url())
+console.log('buttons:', await page.evaluate(() => Array.from(document.querySelectorAll('button')).slice(0, 30).map(b => (b.getAttribute('aria-label') || b.title || b.textContent || '?').trim().slice(0, 30)).filter(Boolean)))
+console.log('inputs:', await page.evaluate(() => Array.from(document.querySelectorAll('input')).map(i => i.placeholder).slice(0, 10)))
+console.log('body head:', (await page.evaluate(() => document.body.textContent || '')).replace(/\s+/g, ' ').slice(0, 300))
+console.log('errors:', errors.slice(0, 5))
+await browser.close()

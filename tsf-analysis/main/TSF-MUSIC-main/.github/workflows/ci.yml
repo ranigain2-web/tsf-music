@@ -1,0 +1,43 @@
+name: CI
+
+# Quality gate for the web app: install → prisma → typecheck (src only) →
+# production build. Runs on every push/PR so a broken main is impossible.
+# The APK workflow (android.yml) is intentionally independent — a server
+# regression should never block shipping the native shell, and vice versa.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Prisma validates the env at import-time; a dummy path is enough for
+      # generate + build (no queries run during `next build` — all routes are
+      # dynamic ƒ, see the route table the build prints).
+      DATABASE_URL: "file:./db/custom.db"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: bunx prisma generate
+
+      - name: Typecheck (src)
+        run: bunx tsc -p tsconfig.ci.json
+
+      - name: Production build
+        run: bun run build

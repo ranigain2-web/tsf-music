@@ -1,0 +1,15 @@
+import { chromium } from 'playwright'
+const browser = await chromium.launch({ headless: true })
+const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
+await page.goto('http://127.0.0.1:3000', { waitUntil: 'networkidle' })
+await page.waitForTimeout(2500)
+await page.evaluate(() => {
+  const b = Array.from(document.querySelectorAll('button')).find((x) => (x.textContent || '').trim() === 'Search')
+  if (b) (b as HTMLElement).click()
+})
+await page.waitForTimeout(1000)
+await page.locator('input[placeholder="What do you want to listen to?"]').first().fill('arijit singh')
+await page.keyboard.press('Enter')
+await page.waitForTimeout(5000)
+await page.screenshot({ path: '/home/z/my-project/upload/debug-songlist-fixed.png' })
+await browser.close()

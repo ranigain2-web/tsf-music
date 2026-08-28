@@ -1,0 +1,48 @@
+{
+  "runAt": "2026-08-26T02:46:44.260Z",
+  "fastest": "hy3-free",
+  "results": [
+    {
+      "model": "hy3-free",
+      "ok": true,
+      "latencyMs": 3320,
+      "tokens": 96
+    },
+    {
+      "model": "nemotron-3-ultra-free",
+      "ok": true,
+      "latencyMs": 3987,
+      "tokens": 52
+    },
+    {
+      "model": "x-preview-f-free",
+      "ok": false,
+      "latencyMs": 975,
+      "error": "HTTP 503"
+    },
+    {
+      "model": "muse-spark-1.2-contributor-free",
+      "ok": false,
+      "latencyMs": 629,
+      "error": "HTTP 403"
+    },
+    {
+      "model": "mimo-v2.5-free",
+      "ok": false,
+      "latencyMs": 982,
+      "error": "HTTP 503"
+    },
+    {
+      "model": "claude-sonnet-5",
+      "ok": false,
+      "latencyMs": 569,
+      "error": "HTTP 401"
+    },
+    {
+      "model": "gemini-3.x-flash",
+      "ok": false,
+      "latencyMs": 496,
+      "error": "HTTP 401"
+    }
+  ]
+}

@@ -1,0 +1,182 @@
+// TSF Music — Prisma schema (SQLite)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---- Catalog cache (from InnerTube) ----
+
+model Track {
+  id          String   @id // videoId
+  title       String
+  artistId    String?
+  artistName  String
+  albumId     String?
+  albumName   String?
+  duration    Int      @default(0) // seconds
+  thumbnail   String? // highest-res ytimg URL
+  bitrate     Int      @default(0)
+  year        Int?
+  isExplicit  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  artist      Artist?       @relation("TrackArtist", fields: [artistId], references: [id])
+  album       Album?        @relation("AlbumTracks", fields: [albumId], references: [id])
+  likes         Like[]        @relation("TrackLikes")
+  history       HistoryItem[] @relation("TrackHistory")
+  playlistTracks PlaylistTrack[]
+  aiSeeds       AiSeedTrack[]
+}
+
+model Artist {
+  id          String   @id // browseId
+  name        String
+  thumbnail   String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tracks      Track[]       @relation("TrackArtist")
+  albums      Album[]       @relation("AlbumArtist")
+}
+
+model Album {
+  id          String   @id // browseId
+  name        String
+  artistId    String?
+  artistName  String?
+  year        Int?
+  thumbnail   String?
+  trackCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  artist      Artist? @relation("AlbumArtist", fields: [artistId], references: [id])
+  tracks      Track[] @relation("AlbumTracks")
+}
+
+// ---- User data (single user, no auth) ----
+
+model Like {
+  id        String   @id @default(cuid())
+  trackId   String
+  createdAt DateTime @default(now())
+
+  track Track @relation("TrackLikes", fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([trackId])
+}
+
+model HistoryItem {
+  id        String   @id @default(cuid())
+  trackId   String
+  playedAt  DateTime @default(now())
+  msPlayed  Int      @default(0)
+
+  track Track @relation("TrackHistory", fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([playedAt])
+}
+
+model Playlist {
+  id        String   @id @default(cuid())
+  name      String
+  description String?
+  coverUrl  String?
+  source    String   @default("manual") // manual | ai | radio
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tracks    PlaylistTrack[]
+  aiSeeds   AiPlaylist[]
+}
+
+model PlaylistTrack {
+  id         String   @id @default(cuid())
+  playlistId String
+  trackId    String
+  position   Int
+  addedAt    DateTime @default(now())
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  track    Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, trackId])
+  @@index([playlistId, position])
+}
+
+model Setting {
+  key   String @id
+  value String
+}
+
+// ---- Cache ----
+
+model ApiCache {
+  key        String   @id
+  payload    String
+  expiresAt  DateTime
+
+  @@index([expiresAt])
+}
+
+model StreamCache {
+  videoId   String   @id // bare videoId, or "videoId::titleHash" for title-bound providers
+  url       String
+  provider  String
+  expiresAt DateTime
+  bitrate   Int      @default(0)
+  artUrl    String?
+
+  @@index([expiresAt])
+}
+
+model ProviderHealth {
+  provider   String   @id
+  ok         Boolean  @default(false)
+  lastCheck  DateTime @default(now())
+  lastError  String?
+  latencyMs  Int      @default(0)
+}
+
+// Relay registry (Piped/Invidious instances) — populated by discovery in
+// deployments that include instances.ts; read opportunistically by /api/health.
+model RelayInstance {
+  id        String   @id
+  kind      String // piped | invidious
+  baseUrl   String
+  ok        Boolean  @default(false)
+  latencyMs Int      @default(0)
+  lastCheck DateTime @default(now())
+  lastError String?
+  seed      Boolean  @default(false)
+}
+
+// ---- AI (Phase 2) ----
+
+model AiPlaylist {
+  id          String   @id @default(cuid())
+  prompt      String
+  playlistId  String?
+  model       String?
+  createdAt   DateTime @default(now())
+
+  playlist Playlist? @relation(fields: [playlistId], references: [id])
+  seeds    AiSeedTrack[]
+}
+
+model AiSeedTrack {
+  id          String @id @default(cuid())
+  aiPlaylistId String
+  trackId     String
+  reason      String?
+
+  aiPlaylist AiPlaylist @relation(fields: [aiPlaylistId], references: [id], onDelete: Cascade)
+  track      Track      @relation(fields: [trackId], references: [id], onDelete: Cascade)
+}

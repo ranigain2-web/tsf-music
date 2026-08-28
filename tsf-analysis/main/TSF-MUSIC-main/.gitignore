@@ -1,0 +1,76 @@
+# ─── dependencies ───────────────────────────────────────────────────────────
+node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ─── next.js build output ───────────────────────────────────────────────────
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# ─── secrets & environment (NEVER commit) ──────────────────────────────────
+# .env holds the local database path; .z-ai-config holds local AI provider
+# credentials. Both are machine-local — ship only the .env.example template.
+.env*
+!.env.example
+.z-ai-config
+*.pem
+*.keystore
+!/.gitkeep
+
+# ─── user data (runtime state — the DB is created by `bun run dev`) ────────
+db/*.db
+db/*.db-journal
+db/*.sqlite
+
+# ─── logs & scratch ─────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+server.log
+dev.out.log
+local-*
+.claude
+prompt
+/3000
+
+# ─── agent-platform scaffolding (not part of the product) ──────────────────
+/skills/
+/download/
+/upload/
+/tool-results/
+/examples/
+/mini-services/
+/reference/
+/.zscripts/
+/worklog.md
+/agent-ctx/
+qa-evidence/
+
+# ─── evidence artifacts (regenerable — see scripts/*-gauntlet*) ────────────
+scripts/*.png
+scripts/mobile-shots/
+assets-src/*.png
+
+# ─── misc ───────────────────────────────────────────────────────────────────
+.DS_Store
+.vercel
+/coverage
+/test
+
+# archived platform git history (kept on disk, never in the repo)
+/.git-archive-platform/
+
+# deno lockfile — bun.lock is canonical
+deno.lock
+
+# platform runtime test scaffolding (references infra not in this repo)
+/tests/
