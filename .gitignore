@@ -71,3 +71,4 @@ src-tauri/resources/
 src-tauri/gen/schemas/
 *.dmg
 probe-report.json
+tool-results/
