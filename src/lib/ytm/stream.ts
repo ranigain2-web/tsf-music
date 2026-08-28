@@ -77,7 +77,14 @@ const PROVIDER_UA: Record<string, string> = {
 const CACHE_TTL_MS = 30 * 60 * 1000
 const SYNTH_TTL_MS = 30 * 60 * 1000
 const WAVE1_CAP_MS = 4000
-const YTDLP_FAIR_WAIT_MS = 7000
+/**
+ * SABR-era tuning (2026-08-28): with InnerTube direct URLs gone, yt-dlp +
+ * bgutil POT is the PRIMARY full-length provider from datacenter IPs. Its
+ * two attempts (default clients → mweb/web_safari/web) need up to ~15s.
+ * The fair wait is extended so a real full-length answer beats a 30s
+ * preview; the ranked cache keeps replays instant either way.
+ */
+const YTDLP_FAIR_WAIT_MS = 14_000
 
 // Providers whose result is the REAL full-length recording.
 const FULL_LENGTH_PROVIDERS = /^(jiosaavn|yt-dlp|innertube-|piped-|invidious-)/
@@ -617,7 +624,10 @@ export async function resolveStream(
     const inCooldown = (key: string) => cooldownSet.has(key)
 
     let innertubeClients: Array<'VISIONOS' | 'IOS' | 'TVHTML5' | 'ANDROID_VR' | 'IOS_MUSIC' | 'ANDROID_MUSIC'> =
-      (['VISIONOS', 'IOS', 'TVHTML5', 'ANDROID_VR', 'IOS_MUSIC', 'ANDROID_MUSIC'] as const).filter(
+      // ANDROID_VR dropped: dead since 2026-08-17, only burned a race slot.
+      // (SABR-era: remaining clients self-heal into cooldown after no-url
+      // probes via the circuit breaker.)
+      (['VISIONOS', 'IOS', 'TVHTML5', 'IOS_MUSIC', 'ANDROID_MUSIC'] as const).filter(
         (c) => !inCooldown(`innertube-${c}`),
       )
     if (innertubeClients.length === 0) innertubeClients = ['VISIONOS', 'IOS']
