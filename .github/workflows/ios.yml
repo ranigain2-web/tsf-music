@@ -141,7 +141,7 @@ jobs:
           zip -qry tsf-music-ios-unsigned.ipa Payload
           ls -la tsf-music-ios-unsigned.ipa
           # sanity: ipa must contain the binary + Info.plist
-          unzip -l tsf-music-ios-unsigned.ipa | rg "Payload/App.app/(App|Info.plist)"
+          unzip -l tsf-music-ios-unsigned.ipa | grep -E "Payload/App.app/(App|Info.plist)"
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
