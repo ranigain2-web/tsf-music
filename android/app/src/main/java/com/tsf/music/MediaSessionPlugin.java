@@ -190,7 +190,9 @@ public class MediaSessionPlugin extends Plugin {
                     if (p != null) p.notifyListeners("command", data);
                 }
             });
-            session.setMediaButtonNotificationComponent(new ComponentName(ctx, MediaPlaybackService.class));
+            // NOTE: MediaSessionCompat.setMediaButtonNotificationComponent was
+            // removed in androidx.media 1.7 — media buttons are handled by the
+            // foreground service's MediaSession callbacks instead.
         }
         Intent i = new Intent(ctx, MediaPlaybackService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

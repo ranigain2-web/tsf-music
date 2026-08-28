@@ -32,7 +32,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::image::Image;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Theme, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
@@ -72,7 +72,7 @@ static BOOTING: AtomicBool = AtomicBool::new(false);
 
 fn find_free_port(start: u16, tries: u8) -> u16 {
     for i in 0..tries {
-        let p = start + i;
+        let p = start + i as u16;
         if TcpListener::bind(("127.0.0.1", p)).is_ok() {
             return p;
         }
@@ -178,8 +178,8 @@ struct BootOutcome {
     error: String,
 }
 
-fn boot_services(app: &AppHandle) -> BootOutcome {
-    match boot_services_inner(app) {
+fn boot_services(app: &AppHandle, win: Option<&WebviewWindow>) -> BootOutcome {
+    match boot_services_inner(app, win) {
         Ok(port) => BootOutcome { ok: true, port, error: String::new() },
         Err(e) => BootOutcome { ok: false, port: 0, error: e },
     }
@@ -195,15 +195,17 @@ fn boot_status(win: Option<&WebviewWindow>, msg: &str) {
 }
 
 fn kill_children(app: &AppHandle) {
+    // Slot-taking helper: the MutexGuard temporary stays inside this fn, so
+    // no borrow of `app.state()` can outlive the State guard (E0597 guard).
+    fn kill_slot(slot: &Mutex<Option<Child>>) {
+        if let Some(mut p) = slot.lock().unwrap().take() {
+            let _ = p.kill();
+            let _ = p.wait();
+        }
+    }
     let st = app.state::<ChildProcs>();
-    if let Some(mut p) = st.server.lock().unwrap().take() {
-        let _ = p.kill();
-        let _ = p.wait();
-    }
-    if let Some(mut p) = st.pot.lock().unwrap().take() {
-        let _ = p.kill();
-        let _ = p.wait();
-    }
+    kill_slot(&st.server);
+    kill_slot(&st.pot);
 }
 
 fn boot_services_inner(app: &AppHandle, win: Option<&WebviewWindow>) -> Result<u16, String> {
@@ -296,7 +298,7 @@ fn boot_task(app: AppHandle) {
     }
     let win = app.get_webview_window("main");
     kill_children(&app);
-    let outcome = boot_services(&app);
+    let outcome = boot_services(&app, win.as_ref());
     if outcome.ok {
         if let Some(win) = win.as_ref() {
             boot_status(Some(win), "Opening your library…");
@@ -452,33 +454,40 @@ fn handle_action_id(app: &AppHandle, id: &str) {
 fn build_menus(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     // -- App menu (first submenu becomes the macOS app menu) -----------------
     let app_sub = Submenu::new(app, "TSF Music", true)?;
-    app_sub.append(&PredefinedMenuItem::about(
-        app,
-        Some("About TSF Music"),
-        Some("AI music player with full-length streaming — every feature, 100% local."),
-    )?)?;
+    app_sub.append(
+        &PredefinedMenuItem::about(
+            app,
+            Some("About TSF Music"),
+            Some(AboutMetadata {
+                name: Some("TSF Music".into()),
+                version: Some(env!("CARGO_PKG_VERSION").into()),
+                copyright: Some("TSF Music".into()),
+                ..Default::default()
+            }),
+        )?,
+    )?;
     app_sub.append(&PredefinedMenuItem::separator(app)?)?;
-    app_sub.append(&PredefinedMenuItem::services(app)?)?;
+    app_sub.append(&PredefinedMenuItem::services(app, None)?)?;
     app_sub.append(&PredefinedMenuItem::separator(app)?)?;
-    app_sub.append(&PredefinedMenuItem::hide(app)?)?;
-    app_sub.append(&PredefinedMenuItem::hide_others(app)?)?;
-    app_sub.append(&PredefinedMenuItem::show_all(app)?)?;
+    app_sub.append(&PredefinedMenuItem::hide(app, None)?)?;
+    app_sub.append(&PredefinedMenuItem::hide_others(app, None)?)?;
+    app_sub.append(&PredefinedMenuItem::show_all(app, None)?)?;
     app_sub.append(&PredefinedMenuItem::separator(app)?)?;
-    app_sub.append(&PredefinedMenuItem::quit(app)?)?;
+    app_sub.append(&PredefinedMenuItem::quit(app, None)?)?;
 
     // -- File ----------------------------------------------------------------
     let file_sub = Submenu::new(app, "File", true)?;
-    file_sub.append(&PredefinedMenuItem::close_window(app)?)?;
+    file_sub.append(&PredefinedMenuItem::close_window(app, None)?)?;
 
     // -- Edit (copy/paste — REQUIRED for search fields) ----------------------
     let edit_sub = Submenu::new(app, "Edit", true)?;
-    edit_sub.append(&PredefinedMenuItem::undo(app)?)?;
-    edit_sub.append(&PredefinedMenuItem::redo(app)?)?;
+    edit_sub.append(&PredefinedMenuItem::undo(app, None)?)?;
+    edit_sub.append(&PredefinedMenuItem::redo(app, None)?)?;
     edit_sub.append(&PredefinedMenuItem::separator(app)?)?;
-    edit_sub.append(&PredefinedMenuItem::cut(app)?)?;
-    edit_sub.append(&PredefinedMenuItem::copy(app)?)?;
-    edit_sub.append(&PredefinedMenuItem::paste(app)?)?;
-    edit_sub.append(&PredefinedMenuItem::select_all(app)?)?;
+    edit_sub.append(&PredefinedMenuItem::cut(app, None)?)?;
+    edit_sub.append(&PredefinedMenuItem::copy(app, None)?)?;
+    edit_sub.append(&PredefinedMenuItem::paste(app, None)?)?;
+    edit_sub.append(&PredefinedMenuItem::select_all(app, None)?)?;
 
     // -- View ----------------------------------------------------------------
     let view_sub = Submenu::new(app, "View", true)?;
@@ -489,7 +498,7 @@ fn build_menus(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         true,
         Some("CmdOrCtrl+R"),
     )?)?;
-    view_sub.append(&PredefinedMenuItem::fullscreen(app)?)?;
+    view_sub.append(&PredefinedMenuItem::fullscreen(app, None)?)?;
     view_sub.append(&PredefinedMenuItem::separator(app)?)?;
     view_sub.append(&MenuItem::with_id(
         app,
@@ -563,10 +572,10 @@ fn build_menus(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
     // -- Window ---------------------------------------------------------------
     let window_sub = Submenu::new(app, "Window", true)?;
-    window_sub.append(&PredefinedMenuItem::minimize(app)?)?;
-    window_sub.append(&PredefinedMenuItem::maximize(app)?)?;
+    window_sub.append(&PredefinedMenuItem::minimize(app, None)?)?;
+    window_sub.append(&PredefinedMenuItem::maximize(app, None)?)?;
     window_sub.append(&PredefinedMenuItem::separator(app)?)?;
-    window_sub.append(&PredefinedMenuItem::bring_all_to_front(app)?)?;
+    window_sub.append(&PredefinedMenuItem::bring_all_to_front(app, None)?)?;
 
     let menu = Menu::new(app)?;
     menu.append(&app_sub)?;
@@ -578,22 +587,10 @@ fn build_menus(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     Ok(menu)
 }
 
-/// Dock menu (macOS right-click on the Dock icon).
-#[cfg(target_os = "macos")]
-fn build_dock_menu(app: &AppHandle) -> tauri::Result<()> {
-    use tauri::menu::MenuBuilder;
-    let dock = MenuBuilder::new(app)
-        .item(&MenuItem::with_id(app, "tsf:show", "Show TSF Music", true, None::<&str>)?)
-        .separator()
-        .item(&MenuItem::with_id(app, "tsf:playpause", "Play/Pause", true, None::<&str>)?)
-        .item(&MenuItem::with_id(app, "tsf:next", "Next", true, None::<&str>)?)
-        .item(&MenuItem::with_id(app, "tsf:previous", "Previous", true, None::<&str>)?)
-        .build()?;
-    app.set_dock_menu(&dock)?;
-    Ok(())
-}
-
-#[cfg(not(target_os = "macos"))]
+/// Dock menu: DEFERRED. tauri 2.11 exposes only `set_dock_visibility` —
+/// the dock-menu API never landed in core. The native menu-bar Playback
+/// section + the tray icon already carry the full transport controls.
+/// Revisit in R-M4 via objc2 (`NSApp.setDockMenu:` + declare_class target).
 fn build_dock_menu(_app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
@@ -674,7 +671,7 @@ pub fn run() {
             let handle = app.handle().clone();
 
             // 1) Native menu bar (App/File/Edit/View/Playback/Window).
-            let menu = build_menus(app)?;
+            let menu = build_menus(&handle)?;
             app.set_menu(menu)?;
 
             // 2) Dock menu + tray.
@@ -688,7 +685,7 @@ pub fn run() {
                 .inner_size(1200.0, 800.0)
                 .min_inner_size(980.0, 640.0)
                 .center()
-                .theme(Theme::Dark)
+                .theme(Some(Theme::Dark))
                 .build()?;
 
             // 4) Now Playing / media keys — init on the main thread (setup runs
