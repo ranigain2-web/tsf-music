@@ -22,6 +22,10 @@ xattr -cr "$APP"
 if [ $? -eq 0 ]; then
   echo "✅ Done. TSF Music can now open normally (Launchpad → TSF Music)."
   echo "   (First launch may take ~5 seconds to boot its local engine.)"
+  echo ""
+  echo "   If the engine ever fails to start:"
+  echo "   • press Retry on the error screen (v0.1.1+ self-heals quarantine),"
+  echo "   • logs live in ~/Library/Logs/com.tsfmusic.desktop"
   open "$APP"
 else
   echo "❌ xattr failed — try:  sudo xattr -cr \"$APP\""

@@ -53,13 +53,35 @@ uses) when present.
 | POT provider log | `~/Library/Logs/com.tsfmusic.desktop/pot-provider.log` |
 | Database | `~/Library/Application Support/com.tsfmusic.desktop/tsf.db` |
 
+## Troubleshooting
+
+**"The engine failed to start" / "did not become healthy within 120s"**
+
+Since v0.1.1 the error screen itself shows the engine's last log lines and the
+app strips the Gatekeeper quarantine flag from its own bundled binaries at
+every boot — so the most common cause (macOS silently killing the bundled
+`bun` / `yt-dlp` helpers that were never un-quarantined) is auto-healed. If it
+still fails:
+
+1. Press **Retry** on the error screen (it re-runs the self-heal + boot).
+2. Check the two log files above — the last lines name the real cause.
+3. Re-run `First-Run-MacOS.command` from the DMG (strips quarantine on the
+   whole app, including everything else), then Retry.
+4. Still stuck? Open an issue with both log files attached.
+
+Historical note (fixed in v0.1.1): the first release built its database URL
+from the unencoded `~/Library/Application Support/...` path — the space broke
+Prisma's `file:` URL parsing on every Mac. It is now percent-encoded
+(`Application%20Support`), and CI's smoke step regression-tests exactly that.
+
 ## Feature verification matrix (CI)
 
 | Feature | Verified by |
 | --- | --- |
 | Engine boots healthy | `probe` job: `/api/health` 200 within 90 s |
+| **The .app boots its OWN bundled engine** | `Smoke` step (macOS runner): executes the packaged Mach-O `resources/runtime/bun` + `server.js` + space-path `DATABASE_URL`, `/api/health` 200 + root page 200 |
 | Search → stream (music core) | `probe` job: 20-track resolve, ≥ N% full-length |
-| yt-dlp + POT chain | `probe` job (same env as the bundled app) |
+| yt-dlp + POT chain | `probe` job (same env as the bundled app) + smoke `yt-dlp --version` |
 | AI playlists / discover | web QA evidence (agent-browser) + engine identity |
 | Native Now Playing / media keys | souvlaki in Rust shell (code + cargo check) |
 | Background audio | `NSAppSleepDisabled` in Info.plist (Tahoe-safe) |
