@@ -1,0 +1,177 @@
+{
+  "menu-order": {
+    "query": "Spotify long press song context menu Add to queue Go to artist Go to album radio order",
+    "results": [
+      {
+        "url": "https://www.reddit.com/r/truespotify/comments/1mgv1a6/why_cant_spotify_just_add_to_the_end_of_the_queue",
+        "name": "Why can't Spotify just add to the end of the queue?",
+        "snippet": "I just wanna queue up a few albums or playlists and let them play to the end. But Spotify always adds stuff right after the current track – not to the ..."
+      },
+      {
+        "url": "https://support.spotify.com/us/article/play-queue",
+        "name": "Play Queue",
+        "snippet": "Click Add to queue . Change the order . In the queue , click and hold the track you want to move . Drag and drop it to the position you want. Remove tracks ... on the ... Read more"
+      },
+      {
+        "url": "https://community.spotify.com/t5/Desktop-Windows/The-context-menu-when-right-clicking-a-song-should-be/td-p/5624465",
+        "name": "The context menu when right-clicking a song should",
+        "snippet": "Aug 17, 2023 — Spotify has changed the order of the context menu . Now Add to Playlist is on top instead of Add to Queue . They should revert this change and ... Read more"
+      },
+      {
+        "url": "https://community.spotify.com/t5/Live-Ideas/Add-the-option-to-add-a-song-as-first-in-queue/idi-p/7313164",
+        "name": "Add the option to add a song as first in queue",
+        "snippet": "Jan 22, 2026 — menu that pops up when you long - press a song on mobile or right-click it on PC, next to options like “ Add to queue ” and “View album .”"
+      },
+      {
+        "url": "https://community.spotify.com/t5/Live-Ideas/Individual-ordering-of-the-context-menu/idi-p/7468143",
+        "name": "Individual ordering of the context menu",
+        "snippet": "Jun 14, 2026 — The idea is to make the context menu for the song — which can be accessed via the three dots in the upper right corner — sortable."
+      },
+      {
+        "url": "https://github.com/orgs/music-assistant/discussions/2895",
+        "name": "Treat Queue and current Playlist/Radio separately like Spotify",
+        "snippet": "Sep 10, 2024 — So in Spotify when you select a playlist or radio and set it to shuffle or play sequentially you can still add things to the top of the queue ..."
+      }
+    ]
+  },
+  "home-chips": {
+    "query": "Spotify home filter chips All Music Podcasts chips 2023 redesign",
+    "results": [
+      {
+        "url": "https://newsroom.spotify.com/2023-03-08/new-home-page-scroll-clips-previews",
+        "name": "Spotify's New Experience Inspires Deeper Discovery and",
+        "snippet": "Mar 8, 2023 — Simply tap into the Music , Podcasts & Shows, or Audiobooks feed to explore visual and audio previews of playlists, albums, podcast episodes, ..."
+      },
+      {
+        "url": "https://www.reddit.com/r/Android/comments/11mutkt/preview_music_podcasts_and_audiobooks_on_spotify",
+        "name": "Preview Music, Podcasts, and Audiobooks on Spotify Home",
+        "snippet": "The homescreen is almost exactly the same but theres filter chips at the top. If you click the music filter , it looks like a decent enough ..."
+      },
+      {
+        "url": "https://variety.com/2023/digital/news/spotify-mobile-app-redesign-discovery-music-podcasts-audiobooks-1235546800",
+        "name": "Spotify Launches Major App Redesign With Vertical Feeds",
+        "snippet": "Mar 8, 2023 — Spotify's redesigned app experience include a new vertically oriented Home feed, with subfeeds for Music , Podcasts & Shows, and Audiobooks with ..."
+      },
+      {
+        "url": "https://www.thurrott.com/music-videos/spotify/280284/spotify-launches-a-major-redesign-with-home-screen-previews",
+        "name": "Spotify Launches a Major Redesign with Home Screen",
+        "snippet": "Spotify today launched a major redesign of its app's home screen that it says will improve discoverability and create more meaningful connections between ... Read more"
+      },
+      {
+        "url": "https://medium.com/design-bootcamp/redesigning-spotify-a0de11c6fba",
+        "name": "Redesigning Spotify!",
+        "snippet": "Firstly, I relocated the ' Music ' and ' Podcasts ' chips to the navigation bar to increase their visibility and encourage users to engage more ..."
+      },
+      {
+        "url": "https://www.theverge.com/2023/3/8/23630821/spotify-design-home-music-podcasts-audiobooks-app",
+        "name": "Spotify's new design is part TikTok, part Instagram, and part",
+        "snippet": "Mar 8, 2023 — Spotify is redesigning the core homescreen of its app , trying to make it easier for users to find new stuff to listen to — and watch. Read more"
+      }
+    ]
+  },
+  "np-controls": {
+    "query": "Spotify player controls row shuffle back play next repeat centered green button",
+    "results": [
+      {
+        "url": "https://community.spotify.com/t5/iOS-iPhone-iPad/My-repeat-button-is-missing/td-p/4724540",
+        "name": "Solved: My repeat button is missing - The Spotify Community",
+        "snippet": "Make sure you're checking in the right place. The Shuffle button will only appear in the Now Playing View or at the top of your playlists when you open them."
+      },
+      {
+        "url": "https://community.spotify.com/t5/Android/Repeat-button-moved-from-now-playing-screen/td-p/4553781",
+        "name": "Repeat button moved from now playing screen - The Spotify",
+        "snippet": "Aug 25, 2018 · Specifically on the Playing screen, the \"Love track\" button has replaced where the shuffle button was, and shuffle has replaced repeat. It ..."
+      },
+      {
+        "url": "https://support.spotify.com/us/article/shuffle-play",
+        "name": "Shuffle play - Spotify Support",
+        "snippet": "Tap your profile picture at the top. Tap Settings and privacy Settings . Select Playback. Switch Include Smart Shuffle in play modes off Toggle switched off ."
+      },
+      {
+        "url": "https://community.spotify.com/t5/iOS-iPhone-iPad/Album-Playback-Green-Button-operates-in-shuffle-mode-can-it-be/td-p/4935498",
+        "name": "Album Playback Green Button operates in shuffle mo",
+        "snippet": "Apr 22, 2020 · if you press the large green play button it starts the playback in a shuffle mode. it's about removing the shuffle feature."
+      },
+      {
+        "url": "https://www.youtube.com/watch?v=ldPw2FE19fk",
+        "name": "How to Fix and Stop Spotify Playing Random Songs - YouTube",
+        "snippet": "Jan 30, 2026 · Next let's look at how you can disable the Spotify shuffle feature. Step 1. Tap to open the song you're currently playing in Spotify. Locate ..."
+      },
+      {
+        "url": "https://community.spotify.com/t5/Android/Play-button-now-has-shuffle-built-in-Why/td-p/5244430",
+        "name": "Play button now has shuffle built in. Why? - The Spotify Community",
+        "snippet": "Aug 5, 2021 · Just to clarify, the green Play button is intended to shuffle play an album or playlist, as it shows the shuffle icon on its right side. You can ..."
+      }
+    ]
+  },
+  "circular-weights": {
+    "query": "Circular Std weights Book Medium Bold Black UI font size tokens",
+    "results": [
+      {
+        "url": "https://lineto.com/typefaces/circular",
+        "name": "Circular - Lineto.com",
+        "snippet": "Circular is a geometric sans-serif font family in eight weights. It is Laurenz Brunner's second official release after the critically acclaimed, immensely ..."
+      },
+      {
+        "url": "https://designsystem.digital.gov/design-tokens/typesetting/font-weight",
+        "name": "Font weight | U.S. Web Design System (USWDS)",
+        "snippet": "USWDS has up to seven font weight theme tokens drawn from nine system tokens. Font weight system tokens use numbers from 100 - 900 in increments of 100, with ..."
+      },
+      {
+        "url": "https://medium.com/@Imran_Molla/top-10-fonts-for-modern-ui-c9e4e526f8cc",
+        "name": "Top 10 fonts for modern UI - Medium",
+        "snippet": "Aug 18, 2019 · Circular Std Font has 4 weights (black, bold, book and medium) It comes in 20 weights, 10 uprights and its matching italics. The Light & ..."
+      },
+      {
+        "url": "https://blitsdental.com/assets/fonts/circular-std/fonts",
+        "name": "Index of /assets/fonts/circular-std/fonts",
+        "snippet": "Index of /assets/fonts/circular-std/fonts. CircularStd-Black.eot. CircularStd-Bold.eot 2020-03-05 19:11 85K CircularStd-Bold.svg. CircularStd-Medium.eot 2020- ..."
+      },
+      {
+        "url": "https://www.reddit.com/r/typography/comments/apk8ir/is_circular_book_free_to_use",
+        "name": "Is Circular Book free to use? : r/typography - Reddit",
+        "snippet": "Feb 11, 2019 · Circular Book is a weight for the typeface Circular. Book is normally just a font weight like regular or bold so it is probably not free."
+      },
+      {
+        "url": "https://befonts.com/circular-std-font.html",
+        "name": "Circular Std Font - Befonts",
+        "snippet": "Jul 28, 2021 · It's a humanist sans serif font created by Lineto with geometric and organic forms. It is a quality sans-serif font with strong geometric types."
+      }
+    ]
+  },
+  "premium-tab": {
+    "query": "Spotify app fourth tab Premium bottom navigation experiment",
+    "results": [
+      {
+        "url": "https://community.spotify.com/t5/Implemented-Ideas/Mobile-Get-rid-of-Create-button-on-mobile-navigation-bar/idi-p/6453037/page/44",
+        "name": "[Mobile] Get rid of 'Create' button on mobile navi - Page 44",
+        "snippet": "Oct 21, 2024 — The new “Create” tab means there are now 4 tabs instead of the original 3, and it's honestly making the app much harder to use."
+      },
+      {
+        "url": "https://community.spotify.com/t5/iOS-iPhone-iPad/Bottom-Navigation-Not-Showing-on-iOS-for-Certain-Accounts/td-p/1466161",
+        "name": "Bottom Navigation Not Showing on iOS for Certain Accounts",
+        "snippet": "Oct 9, 2016 — Her Spotify app on iOS shows the old side menu bar, not the bottom menu bar. Please take a look at this support article: https://support. ..."
+      },
+      {
+        "url": "https://medium.com/@florian_71106/how-to-build-a-spotify-style-bottom-sheet-tab-navigation-in-react-native-expo-aa7d109abaa2",
+        "name": "How to Build a Spotify-Style Bottom Sheet Tab Navigation",
+        "snippet": "In this tutorial, we'll recreate the bottom tab navigation bar inspired by Spotify — complete with a central “Create” button that triggers a ... Read more"
+      },
+      {
+        "url": "https://www.androidauthority.com/spotify-create-tab-inconvenience-3562796",
+        "name": "This one Spotify change made it way harder to jam out on",
+        "snippet": "Jun 2, 2025 — After several years with just three tabs across its bottom row — covering Home, Search, and Your Library — it decided to add a fourth . Yes ... Read more"
+      },
+      {
+        "url": "https://www.threads.com/@chrismasterson/post/DJnlIgaxTnB/to-the-spotify-designer-that-lost-the-battle-against-adding-this-4th-tab-i-see-y?hl=en",
+        "name": "To the Spotify designer that lost the battle against adding",
+        "snippet": "Spotify designer that lost the battle against adding this 4th tab ,&nbsp;... the bottom menu is intended for 2 to 5 tabs ,"
+      },
+      {
+        "url": "https://www.macstories.net/ios/spotify-brings-back-the-tab-bar-on-ios",
+        "name": "Spotify Brings Back the Tab Bar on iOS",
+        "snippet": "May 3, 2016 — Starting today, the company is rolling out a redesigned navigation experience on the iPhone with five tabs across the bottom – Home, Browse, ..."
+      }
+    ]
+  }
+}

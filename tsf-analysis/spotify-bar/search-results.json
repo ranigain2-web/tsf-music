@@ -1,0 +1,777 @@
+{
+  "encore-tokens": {
+    "query": "Spotify design system Encore colors #121212 #1ed760 background-base text-subdued",
+    "results": [
+      {
+        "url": "https://themeandcolor.com/blog/spotify-dark-mode-colors",
+        "name": "Spotify Dark Mode Hex Code #121212 - Theme & Color",
+        "snippet": "Jun 26, 2026 — The main Spotify dark mode background is # 121212 —a near-black gray that keeps album art vivid without harsh pure-black contrast. Cards and tiles ...",
+        "host": "themeandcolor.com",
+        "date": "Jun 26, 2026"
+      },
+      {
+        "url": "https://www.figma.com/blog/creating-coherence-how-spotifys-design-system-goes-beyond-platforms",
+        "name": "How Spotify's Design System Goes Beyond Platforms",
+        "snippet": "Aug 31, 2023 — Encore is made up of two subsystems (Mobile and Web), which share a foundation of design decisions in order to build coherence across our ...",
+        "host": "www.figma.com",
+        "date": "Aug 31, 2023"
+      },
+      {
+        "url": "https://medium.com/spotify-design/5-things-i-wish-id-known-before-starting-a-design-system-at-spotify-f8624abf1081",
+        "name": "5 Things I Wish I'd Known Before Starting a Design System",
+        "snippet": "... Encore , the design system for Spotify . I learned some key points along the way, which I hope will help you in your own design system journey.",
+        "host": "medium.com",
+        "date": ""
+      },
+      {
+        "url": "https://developer.spotify.com/documentation/design",
+        "name": "Design & Branding Guidelines | Spotify for Developers",
+        "snippet": "These guidelines are meant to help any external developer integrating Spotify into their product. Extract artwork color for background (Android Palette).",
+        "host": "developer.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.astrouxds.com/design-tokens/system",
+        "name": "System Tokens",
+        "snippet": "The Astro Space UX Design System . Tokens representing Astro semantic design decisions. Background color of base elements, like the app or popup menus. ...",
+        "host": "www.astrouxds.com",
+        "date": ""
+      },
+      {
+        "url": "https://terra.vts.com/foundation/color/palette",
+        "name": "Colors - Terra Design System",
+        "snippet": "Primary inverse is used on any background color that exceeds 50 darkness, like primary buttons. Subdue is for labels, subtitles, subtexts. Disabled is for any ...",
+        "host": "terra.vts.com",
+        "date": ""
+      },
+      {
+        "url": "https://spectrum.adobe.com/page/using-color",
+        "name": "Using color - Spectrum, Adobe's design system",
+        "snippet": "Background layer colors create dimension, hierarchy, and separation between content. Use these in large regions of layout — not for component backgrounds .",
+        "host": "spectrum.adobe.com",
+        "date": ""
+      },
+      {
+        "url": "https://developer.blackbaud.com/skyux/design/styles/color",
+        "name": "Colors - SKY UX design system",
+        "snippet": "SKY UX uses text colors to communicate information hierarchy, state, and interaction. These colors are built into SKY UX components and typography classes, ...",
+        "host": "developer.blackbaud.com",
+        "date": ""
+      }
+    ]
+  },
+  "brand-colors": {
+    "query": "Spotify brand color hex green #1ED760 #191414 official brand guidelines",
+    "results": [
+      {
+        "url": "https://www.brandcolorcode.com",
+        "name": "Spotify Brand Color Codes » BrandColorCode.com",
+        "snippet": "As per the official brand guidelines , the Spotify logo uses a lighter tint of green with the hex code # 1ED760 . Spotify app loading on an iPhone Girl ... Read more",
+        "host": "www.brandcolorcode.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.pinterest.com",
+        "name": "Spotify colors palette - ColorsWall",
+        "snippet": "Discover the official Spotify colors palette. Use these HEX color codes to bring the Spotify brand to life in your projects . #1db954 #1ed760 #ffffff #191414 ...",
+        "host": "www.pinterest.com",
+        "date": ""
+      },
+      {
+        "url": "https://developer.spotify.com",
+        "name": "Design & Branding Guidelines | Spotify for Developers",
+        "snippet": "The Spotify green logo should only be used on a black or white background , for any other background you should use a monochrome logo. The black logo should be ... Read more",
+        "host": "developer.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.color-name.com",
+        "name": "Spotify Green color hex code is #1DB954",
+        "snippet": "Their official brand guidelines clearly states that the logo uses a lighter tone of green with hex code # 1ED760 .",
+        "host": "www.color-name.com",
+        "date": ""
+      },
+      {
+        "url": "https://pickcoloronline.com",
+        "name": "Spotify Brand Colors: Hex Codes & Color Palette",
+        "snippet": "Spotify official brand colors with the exact HEX codes . The colors of Spotify are #1ed760, #121212, #ffffff according to developer.spotify.com.",
+        "host": "pickcoloronline.com",
+        "date": ""
+      },
+      {
+        "url": "https://mobbin.com",
+        "name": "Spotify Brand Color Palette: Hex, RGB, CMYK and UIs",
+        "snippet": "The platform's branding prominently features green (#1DB954), white (#FFFFFF), and black (#191414) colors . You can easily copy Spotify's colors in Hex, CMYK,",
+        "host": "mobbin.com",
+        "date": ""
+      }
+    ]
+  },
+  "typography": {
+    "query": "Spotify Circular Std font typography weights sizes UI design",
+    "results": [
+      {
+        "url": "https://www.pinterest.com/pin/circular-spotify-text-font-free-download--72198400271505714",
+        "name": "Circular Spotify Text Font FREE download",
+        "snippet": "Circular is a geometric sans serif font family that comes in eight weights . Circular Font family is available for free download at Free Fonts Vault.",
+        "host": "www.pinterest.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Social-Random/DESIGN-New-Font-for-Spotify-Spotify-Mix-vs-Spotify-Circular/td-p/6130932",
+        "name": "DESIGN* New Font for Spotify - Spotify Mix vs Spotify Circular",
+        "snippet": "Jun 12, 2024 — It really just looks like a modern version of Comic Sans. at small sizes it works well, but I dislike it in big and bold sizes .",
+        "host": "community.spotify.com",
+        "date": "Jun 12, 2024"
+      },
+      {
+        "url": "https://www.designmonks.co/blog/old-vs-new-spotify-font-why-did-spotify-change-the-font",
+        "name": "Old Vs New Spotify Font: Is Spotify Mix Doing All Good?",
+        "snippet": "Dec 24, 2024 — The new font introduces expressive curves inspired by sound and rhythm. Variable font technology adds flexibility in weight , width, and style. Read more",
+        "host": "www.designmonks.co",
+        "date": "Dec 24, 2024"
+      },
+      {
+        "url": "https://fontpair.co/fonts/circular-std",
+        "name": "Circular Std Font | Preview, Websites & Pairings",
+        "snippet": "Circular Std . Spotify's iconic typeface by Lineto, a tech industry staple with perfect geometric proportions. Designed By. Lineto. Read more",
+        "host": "fontpair.co",
+        "date": ""
+      },
+      {
+        "url": "https://www.designyourway.net/blog/spotify-font",
+        "name": "The Spotify font and what font does Spotify use (Answered)",
+        "snippet": "Jan 8, 2023 — Also known as Spotify Circular, this font is derived from Gotham. The Spotify font features five weights: Black, Bold, Medium, Book, and Light . Read more",
+        "host": "www.designyourway.net",
+        "date": "Jan 8, 2023"
+      },
+      {
+        "url": "https://medium.com/@Imran_Molla/top-10-fonts-for-modern-ui-c9e4e526f8cc",
+        "name": "Top 10 fonts for modern UI",
+        "snippet": "Circular Std Font has 4 weights (black, bold, book and medium) and this font will be the best addition for your design. It comes in 20 weights, ...",
+        "host": "medium.com",
+        "date": ""
+      },
+      {
+        "url": "https://sensatype.com/what-font-does-spotify-use-in-2026",
+        "name": "What Font Does Spotify Use in 2026?",
+        "snippet": "Dec 4, 2025 — Spotify then chose Circular, a premium geometric sans serif font from Lineto. Its rounded, modern letterforms fit seamlessly with the Spotify ... Read more",
+        "host": "sensatype.com",
+        "date": "Dec 4, 2025"
+      },
+      {
+        "url": "https://vocal.media/art/circular-std-font-a-modern-typeface-for-every-design-need",
+        "name": "Circular Std Font: A Modern Typeface for Every Design Need",
+        "snippet": "Multiple Weights: Circular Std offers multiple weights , ranging from Thin to Black. This flexibility allows designers to use it for both headings and body text. Read more",
+        "host": "vocal.media",
+        "date": ""
+      }
+    ]
+  },
+  "ui-hex": {
+    "query": "Spotify color palette #b3b3b3 #282828 #181818 web player UI hex codes",
+    "results": [
+      {
+        "url": "https://www.color-hex.com/color-palette/53188",
+        "name": "Spotify Player Color Palette",
+        "snippet": "Spotify Player color palette created by lycrios that consists #1db954,#212121,#121212,#535353,#b3b3b3 colors. #b3b3b3",
+        "host": "www.color-hex.com",
+        "date": ""
+      },
+      {
+        "url": "https://mobbin.com/colors/brand/spotify",
+        "name": "Spotify Brand Color Palette: Hex, RGB, CMYK and UIs - Mobbin",
+        "snippet": "Access Spotify's official Hex, CMYK, RGB, and HSB/HSL codes. See how these colors come to life in real-world UI designs.",
+        "host": "mobbin.com",
+        "date": ""
+      },
+      {
+        "url": "https://pickcoloronline.com/brands/spotify",
+        "name": "Spotify Brand Colors: Hex Codes & Color Palette | Pick Color Online",
+        "snippet": "Spotify official brand colors with the exact HEX codes. The colors of Spotify are #1ed760, #121212, #ffffff",
+        "host": "pickcoloronline.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.pinterest.com/pin/spotify-colors-palette--16677461110264933",
+        "name": "Spotify colors palette - ColorsWall - Pinterest",
+        "snippet": "Discover the official Spotify colors palette. Use these HEX color codes to bring the Spotify brand to life in your projects. #1ed760, #ffffff, #191414.",
+        "host": "www.pinterest.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.designpieces.com/palette/spotify-color-palette-hex-and-rgb",
+        "name": "Spotify Color Palette (Hex and RGB) - Design Pieces",
+        "snippet": "May 11, 2017 · The brand color palette for Spotify is made up of 2 colors. Spotify Mountain Meadow Hex: #1db954 RGB: 29, 185, 84 Spotify Cod Gray Hex: #191414 ...",
+        "host": "www.designpieces.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.brandcolorcode.com/spotify",
+        "name": "Spotify Brand Color Codes » BrandColorCode.com",
+        "snippet": "Get the official color codes of Spotify brand at BrandColorCode.com. Spotify logo uses a lighter tint of green with the hex code #1ED760. Green color Hex code ...",
+        "host": "www.brandcolorcode.com",
+        "date": ""
+      }
+    ]
+  },
+  "bottom-nav": {
+    "query": "Spotify mobile app bottom navigation tabs Home Search Your Library Premium 2024",
+    "results": [
+      {
+        "url": "https://community.spotify.com/t5/Implemented-Ideas/Mobile-Get-rid-of-Create-button-on-mobile-navigation-bar/idi-p/6453037",
+        "name": "[Mobile] Get rid of 'Create' button on mobile navigation bar",
+        "snippet": "Oct 21, 2024 — There's no reason to have the option to create a playlist on the same level as access to library , home and search . No one creates playlists ... Read more",
+        "host": "community.spotify.com",
+        "date": "Oct 21, 2024"
+      },
+      {
+        "url": "https://community.spotify.com/t5/Other-Podcasts-Partners-etc/Mobile-navigation-bar-covering-last-song-media/td-p/7276714",
+        "name": "Solved: Mobile navigation bar covering last song/media",
+        "snippet": "Dec 24, 2025 — The bottom is covering the refresh button and won't scroll up further no matter what I do. Any suggestions? Solved! Go to Solution. Labels:. Read more",
+        "host": "community.spotify.com",
+        "date": "Dec 24, 2025"
+      },
+      {
+        "url": "https://mashable.com/article/spotify-mobile-app-redesign-free-tier-on-demand-playlists",
+        "name": "Spotify unveils redesigned mobile app with on-demand",
+        "snippet": "The new version of the app has four tabs: Home , Search, Your Library, and Premium. The previous Browse and Search sections have been rolled into a single new ... Read more",
+        "host": "mashable.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Android/Menu-Bar-Location-settings/td-p/5016807",
+        "name": "Menu Bar Location settings",
+        "snippet": "Aug 14, 2020 — My Home / Search / Your Library bar has shifted position from the bottom of the screen to the left side. I would like to move it back. Any help on ...",
+        "host": "community.spotify.com",
+        "date": "Aug 14, 2020"
+      },
+      {
+        "url": "https://stackoverflow.com/questions/78542116/how-to-a-flutter-apps-bottom-navigation-bar-on-top-of-all-page",
+        "name": "How to a flutter apps Bottom Navigation bar on top of all page",
+        "snippet": "a flutter apps Bottom Navigation bar . Im making a Clone of Spotify using Flutter where I designed a Customized bottom navigation bar",
+        "host": "stackoverflow.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Your-Library/New-Your-Library-view-iOS-amp-Android/td-p/5196161/page/5",
+        "name": "New Your Library view (iOS & Android) - Page 5",
+        "snippet": "Spotify is introducing a new version of the Your Library view to mobile users of the iOS and Android apps . (Requires Premium ) in the home tab .",
+        "host": "community.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.reddit.com/r/Android/comments/5e48l3/new_spotify_android_app_user_interface",
+        "name": "New Spotify Android App User Interface!",
+        "snippet": "tablet UI gives ability to play any songs without premium subscription … tabs for \" my library \", \"explore\", search \", and for a full menu",
+        "host": "www.reddit.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Android/Bottom-bar-and-now-playing-cover-options-when-searching-within-a/td-p/7402023",
+        "name": "Bottom bar and now playing cover options when sear",
+        "snippet": "Apr 10, 2026 — When searching within a playlist, the new playing bar and the bottom nav bar obscure the last couple of options and it is not possible to select ... Read more",
+        "host": "community.spotify.com",
+        "date": "Apr 10, 2026"
+      }
+    ]
+  },
+  "home-shelves": {
+    "query": "Spotify app home screen layout shelves \"quick picks\" \"made for you\" grid rows",
+    "results": [
+      {
+        "url": "https://www.youtube.com/watch?v=suhEIUapSJQ",
+        "name": "I Redesigned the ENTIRE Spotify UI from Scratch - YouTube",
+        "snippet": "May 27, 2024 · Let's redesign Spotify, talk about its UI issues and try to improve them one by one. Hope you have fun! Try Mobbin in your next design ...",
+        "host": "www.youtube.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Your-Library/New-Your-Library-view-iOS-amp-Android/td-p/5196161/page/21",
+        "name": "New Your Library view (iOS & Android) - Page 21 - The Spotify Community",
+        "snippet": "To switch to the grid view, tap on the squares icon to the right. Tap on it again to go back to the list view. NYL21GridView.PNG. Universal search: The ...",
+        "host": "community.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://hub.thinksmartbox.com/knowledgebase/getting-started-with-spotify",
+        "name": "Getting started with Spotify - Smartbox Hub",
+        "snippet": "The Spotify accessible app for Grid lets Windows users complete control over their music and more. The top row of cells has the main controls for playing your ...",
+        "host": "hub.thinksmartbox.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.reddit.com/r/tasker/comments/376al9/how_to_make_a_spotify_icon_grid_playlist_display",
+        "name": "[HOW TO] Make a Spotify Icon Grid Playlist Display for Tasker - Reddit",
+        "snippet": "May 25, 2015 · Go into the Tasks. · In that text file you've got to put the correct URI to each of your playlists you want the Scene to make available, which ... How do I change the Home Screen thing on Spotify app I Redesigned the ENTIRE Spotify UI from Scratch : r/truespotify More results from www.reddit.com",
+        "host": "www.reddit.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Your-Library/Spotify-keeps-switching-from-grid-to-list-view/td-p/5358047",
+        "name": "Spotify keeps switching from grid to list view",
+        "snippet": "Mar 24, 2022 · 1) open.spotify.com > Your Library > Artists · 2) Select any artist · 3) Scroll to Discography · 4) Select Albums, then See All RESULT: List View ...",
+        "host": "community.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.tiktok.com/@getashelf/video/7623507468764613902",
+        "name": "Enhance Your Home Screen with Shelf Widget - TikTok",
+        "snippet": "Mar 31, 2026 · The Shelf Widget is a powerful tool that can greatly enhance your digital experience by providing quick access to your most cherished songs, ...",
+        "host": "www.tiktok.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.cnet.com/tech/services-and-software/spotify-is-giving-its-home-screen-a-makeover",
+        "name": "Spotify Is Giving Its Home Screen a Makeover - CNET",
+        "snippet": "Mar 8, 2023 · The app's layout is also moving away from a grid of album covers, in favor of an infinite scroll akin to a TikTok feed.",
+        "host": "www.cnet.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.instagram.com/reel/DPy7OrZEUFx",
+        "name": "Fixing one of Spotify's most used feature - Their pop up UI Design",
+        "snippet": "Oct 14, 2025 · Since iOS 26 is here & the way apps are tweaking their interface to feel more “liquidy”, this was the right opportunity to create a much needed ...",
+        "host": "www.instagram.com",
+        "date": ""
+      }
+    ]
+  },
+  "now-playing": {
+    "query": "Spotify now playing screen layout buttons order devices queue lyrics expand",
+    "results": [
+      {
+        "url": "https://support.spotify.com/us/article/now-playing",
+        "name": "Now Playing view",
+        "snippet": "Control what plays with the Now Playing view. You can play, pause, and skip tracks as standard. Mix up the order of what's playing . See and control what plays ...",
+        "host": "support.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.reddit.com/r/truespotify/comments/14kdlv9/spotify_wasted_their_time_with_the_useless_now",
+        "name": "Spotify wasted their time with the useless \"Now Playing",
+        "snippet": "You have to tap on Now Playing bar, click on Lyrics and then, expand icon rather than just press the mic button in below. They're incorporating ...",
+        "host": "www.reddit.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Implemented-Ideas/Mobile-Return-repeat-and-queue-buttons-to-Now-Playing-screen/idi-p/4670123",
+        "name": "(Mobile) Return repeat and queue buttons to Now Pl",
+        "snippet": "Feb 2, 2019 — the Repeat and Queue buttons have returned to the Now Playing View on the mobile app. The repeat button has moved to the left and you Queue can ...",
+        "host": "community.spotify.com",
+        "date": "Feb 2, 2019"
+      },
+      {
+        "url": "https://community.spotify.com/t5/Desktop-Windows/Desktop-New-quot-Now-Playing-View-quot-sidebar/td-p/5600889/page/6",
+        "name": "Desktop: New \"Now Playing View\" sidebar - Page 6",
+        "snippet": "The Now Playing View sidebar will open up on the right side of the app by default when you start playback, but you can disable this behavior under Settings ➜ ... Read more",
+        "host": "community.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Android/Bring-back-queue-button-on-now-playing-screen-please/td-p/4986624",
+        "name": "Bring back queue button on now playing screen please",
+        "snippet": "No, seriously, why? Was it so hard to put the share bottom NEXT to the queue ? Do the developers even use spotify on mobile devices ? Read more",
+        "host": "community.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Desktop-Windows/Full-screen-lyrics-issue/td-p/7371514",
+        "name": "Full screen lyrics issue",
+        "snippet": "Mar 12, 2026 — When I press the Lyrics button , instead of staying in full screen , Spotify zooms out and shows the full interface: “Your Library” on the right. Read more",
+        "host": "community.spotify.com",
+        "date": "Mar 12, 2026"
+      },
+      {
+        "url": "https://www.facebook.com/techjuicepk/posts/spotify-brings-song-lyrics-to-the-now-playing-screenspotify-is-making-it-easier-/1324980979658307",
+        "name": "Spotify Brings Song Lyrics to the Now Playing Screen.",
+        "snippet": "While listening, swipe up from the bottom of the screen . You'll see track lyrics that scroll in real time as the song is playing ! To share, ... Read more",
+        "host": "www.facebook.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Your-Library/New-update-Lyrics-cover-the-left-side-bar-with-playlists-and/td-p/7376709",
+        "name": "New update - Lyrics cover the left side bar with p",
+        "snippet": "Mar 17, 2026 — The issue as I see it is that when the Spotify app is showing lyrics and is not the focus, it switches to this full screen mode - which hides ... Read more",
+        "host": "community.spotify.com",
+        "date": "Mar 17, 2026"
+      }
+    ]
+  },
+  "miniplayer": {
+    "query": "Spotify miniplayer minimized player behavior tap expand swipe down mobile",
+    "results": [
+      {
+        "url": "https://community.spotify.com/t5/Live-Ideas/Android-swipe-down-current-playing-song-view-instead-of-tapping/idi-p/5648062/page/2",
+        "name": "[Android] swipe down current playing song view ins - Page 2",
+        "snippet": "Oct 6, 2023 · Please add the swipe up option on the Now Playing to maximize it as well as swipe down to minimize it. This will give an seamless experience.",
+        "host": "community.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.reddit.com/r/YoutubeMusic/comments/gebs3w/nice_detail_in_the_new_ui_you_can_close_the",
+        "name": "You can close the miniplayer by swiping down on it : r/YoutubeMusic",
+        "snippet": "May 6, 2020 · You can Disable it! In settings, toggle off \"show the now-playing panel on click of play\" If you tap the album art, you can switch between ... Spotify Mini Player keeps moving on desktop app : r/truespotify - Reddit How can I disable the new \"Now Playing Info\" UI feature in Spotify? More results from www.reddit.com",
+        "host": "www.reddit.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Community-Blog/Introducing-the-Spotify-Miniplayer-to-Spotify-Desktop/ba-p/5956132",
+        "name": "Introducing the Spotify Miniplayer to Spotify Desktop",
+        "snippet": "Mar 21, 2024 · Thanks to the Miniplayer, I can now shuffle my queue or put a song on repeat without opening the main app. I can also quickly add or remove a ...",
+        "host": "community.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.youtube.com/watch?v=CtYecEvRubw",
+        "name": "How to Remove Spotify Mini Player on Android & iPhone – Easy Fix",
+        "snippet": "Nov 7, 2025 · The new Spotify mini player can be distracting for users who prefer a cleaner interface. To disable it on Android, open Spotify → tap your ...",
+        "host": "www.youtube.com",
+        "date": ""
+      },
+      {
+        "url": "https://forums.androidcentral.com/threads/spotify-player-showing-up-in-quick-panel-and-no-idea-how-to-get-rid-of-it-help.1047323",
+        "name": "Spotify Player showing up in Quick Panel and no idea how to get rid of",
+        "snippet": "Jul 22, 2022 · You can't swipe away. Just long press and remove. reboot the phone and when unlock the phone and restarts...",
+        "host": "forums.androidcentral.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Android/Spotify-controls-no-longer-showing-on-lock-screen/td-p/5343491",
+        "name": "Solved: Spotify controls no longer showing on lock screen",
+        "snippet": "When Spotify is playing, swipe down from the top when your phone is unlocked > Swipe down again on the Spotify media controls and tap on Media Output > Press",
+        "host": "community.spotify.com",
+        "date": ""
+      }
+    ]
+  },
+  "lyrics": {
+    "query": "Spotify lyrics screen design synced karaoke highlight bold green",
+    "results": [
+      {
+        "url": "https://www.reddit.com/r/truespotify/comments/1r649sc/made_a_free_desktop_app_to_view_spotify_lyrics",
+        "name": "Made a free desktop app to view Spotify lyrics (karaoke-",
+        "snippet": "Made a free desktop app to view Spotify lyrics ( karaoke -style) Sometimes the lyrics of a song do not sync , synced within the Spotify app.",
+        "host": "www.reddit.com",
+        "date": ""
+      },
+      {
+        "url": "https://apps.apple.com/gb/app/dynamic-lyrics-karaoke-songs/id6753217999",
+        "name": "Dynamic Lyrics Karaoke Songs - App Store",
+        "snippet": "Karaoke brings live, synced lyrics to your music experience. seamlessly integrates with Apple Music and Spotify.",
+        "host": "apps.apple.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Live-Ideas/Lyric-Font-and-Background-Color-Accessibility-Settings/idi-p/6583224",
+        "name": "Lyric Font and Background Color Accessibility Settings",
+        "snippet": "Dec 13, 2024 — Hello, recently it looks strange when I display the lyrics on Spotify . It's suddenly much darker (the lyrics and the background) and just ...",
+        "host": "community.spotify.com",
+        "date": "Dec 13, 2024"
+      },
+      {
+        "url": "https://www.facebook.com/groups/deafandhoh/posts/10160294853647309",
+        "name": "How to display synced lyrics on a screen with audio",
+        "snippet": "Basically it was as simple as settings > general > external display > document + lyrics + rotation *90",
+        "host": "www.facebook.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.tiktok.com",
+        "name": "How to Change Spotify Lyrics Color",
+        "snippet": "Aug 17, 2026 — Discover how to change the color of Spotify lyrics for a unique musical experience. Customize your app effortlessly with our step-by-step guide ...",
+        "host": "www.tiktok.com",
+        "date": "Aug 17, 2026"
+      },
+      {
+        "url": "https://vocal.media/fyi/how-to-use-spotify-lyrics-for-karaoke-tips-to-make-your-sessions-fun",
+        "name": "How to Use Spotify Lyrics for Karaoke: Tips to Make Your",
+        "snippet": "Full-Screen Mode: Use Spotify's full-screen lyrics view to make the text larger and more legible. This is especially helpful for group karaoke sessions where ...",
+        "host": "vocal.media",
+        "date": ""
+      }
+    ]
+  },
+  "queue": {
+    "query": "Spotify queue screen mobile reorder remove design",
+    "results": [
+      {
+        "url": "https://www.reddit.com/r/truespotify/comments/1hy39mm/spotify_queue_layout_change_does_anyone_know_how",
+        "name": "Spotify queue layout change. Does anyone know how to fix",
+        "snippet": "My Spotify Queue layout has changed and I'm not sure how to revert it. It doesn't even let me queue songs now and instead shuffles the entire playlist. ...",
+        "host": "www.reddit.com",
+        "date": ""
+      },
+      {
+        "url": "https://support.spotify.com/us/article/play-queue",
+        "name": "Play Queue",
+        "snippet": "In the queue, right-click or click 3 horizontal dots on the track you want to remove. Click Remove from queue. Clear queue. In the queue, select Clear queue.",
+        "host": "support.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Android/Queue-management-is-so-broken-reorder-queue/td-p/578270",
+        "name": "Queue management is so broken (reorder queue)",
+        "snippet": "Queue management is basically non-existant. You can't reorder the queue? It should be as simple as dragging a handle on the song you want moved ...",
+        "host": "community.spotify.com",
+        "date": "Nov 4, 2013"
+      },
+      {
+        "url": "https://community.spotify.com/t5/Android/Cannot-remove-song-from-queue-anymore-since-2025/td-p/6646809",
+        "name": "Cannot remove song from queue anymore (since 2025)",
+        "snippet": "The “Remove track from queue” option was removed from the queue with the last app-update for Android devices in January 2025. What to expect. I ...",
+        "host": "community.spotify.com",
+        "date": "Jan 12, 2025"
+      },
+      {
+        "url": "https://www.drmare.com/spotify-music/spotify-clear-queue.html",
+        "name": "How to Clear Queue on Spotify on iPhone, Android, Desktop",
+        "snippet": "Tap the \"Queue\" icon Spotify, usually labeled as \"Clear Queue\", next to the \"Next in Queue\" section. Click on it to remove all songs from the ...",
+        "host": "www.drmare.com",
+        "date": "Jun 27, 2025"
+      },
+      {
+        "url": "https://community.spotify.com/t5/Android/Clear-the-queue/td-p/5792987",
+        "name": "Solved: Clear the queue",
+        "snippet": "Click the \"Queue\" button bottom right hand side and \"Clear Queue\" should be located in that menu/sidebar depending on app or web. Should is definitely the ...",
+        "host": "community.spotify.com",
+        "date": ""
+      }
+    ]
+  },
+  "library": {
+    "query": "Spotify Your Library screen mobile filter chips playlists artists albums sort grid",
+    "results": [
+      {
+        "url": "https://support.spotify.com/us/article/sort-and-filter",
+        "name": "Sort and filter - Spotify",
+        "snippet": "To switch between grid or list view, tap List view / Grid view Sort and filter playlists Tap the playlist . Tap filters for sorting options, or Search to search ...",
+        "host": "support.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Live-Ideas/Mobile-Your-Library-Pin-a-filter-type-to-make-it-the-default/idi-p/5198188",
+        "name": "[Mobile][Your Library] Pin a filter type to make i",
+        "snippet": "May 3, 2021 — Pin a filter type to make it the default Library sorting . Playlists (or Artists or Albums ) Library > Playlists > Sort By > Custom Order just to ...",
+        "host": "community.spotify.com",
+        "date": "May 3, 2021"
+      },
+      {
+        "url": "https://community.spotify.com/t5/Your-Library/New-Your-Library-view-iOS-amp-Android/td-p/5196161/page/21",
+        "name": "New Your Library view (iOS & Android) - Page 21",
+        "snippet": "Your Library is now one simple list . At the top, tap on the filters to filter the content you want to see and tap on the sort options to change the sort order ... Read more",
+        "host": "community.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://9to5mac.com/2021/04/29/spotify-launches-redesigned-your-library-ios-android",
+        "name": "Spotify launches redesigned 'Your Library' with new grid",
+        "snippet": "Apr 29, 2021 — Changes include a new grid view, dynamic filters , improved sorting , and more to better access all of your music and podcasts in one place.",
+        "host": "9to5mac.com",
+        "date": "Apr 29, 2021"
+      },
+      {
+        "url": "https://routenote.com/blog/spotify-update-your-library",
+        "name": "Spotify update 'Your Library' with a new layout and features",
+        "snippet": "Apr 30, 2021 — Use the new Grid view to sort through your liked content in a more visual way with large-tiled album, playlist, and podcast cover art. Spotify ... Read more",
+        "host": "routenote.com",
+        "date": "Apr 30, 2021"
+      },
+      {
+        "url": "https://www.lifewire.com/use-your-library-in-spotify-7494508",
+        "name": "How to Use Your Library in Spotify",
+        "snippet": "May 12, 2023 — Tap Your Library . · Tap Playlists, Podcasts & Shows, Albums, or Artists to filter Your Library. · Tap the X to remove the filter. · Tap the Grid ... Read more",
+        "host": "www.lifewire.com",
+        "date": "May 12, 2023"
+      }
+    ]
+  },
+  "search": {
+    "query": "Spotify search screen mobile browse all genres colored cards recent searches",
+    "results": [
+      {
+        "url": "https://support.spotify.com/us/article/search",
+        "name": "Search - Spotify",
+        "snippet": "Find what you're looking for with Search , including: Songs; Albums; Artists; Audiobooks; Playlists; Podcasts; Genres; Moods; Profiles ... Read more",
+        "host": "support.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Android/Recent-searches-beaviour-broken/td-p/5245732",
+        "name": "Solved: Recent searches beaviour broken",
+        "snippet": "Aug 9, 2021 — Currently the Search function on Mobile will give you a list of recently searched for and played songs. This is intended to give you an ease of ...",
+        "host": "community.spotify.com",
+        "date": "Aug 9, 2021"
+      },
+      {
+        "url": "https://www.reddit.com/r/spotify/comments/78zozj/spotify_now_displays_your_search_history_as_what",
+        "name": "Spotify now displays your search history as what you",
+        "snippet": "Spotify now displays your search history as what you clicked on vs what you typed! See. Read more",
+        "host": "www.reddit.com",
+        "date": ""
+      },
+      {
+        "url": "https://en.community.sonos.com/controllers-and-music-services-229131/spotify-browsing-through-genres-not-possible-anymore-6832242",
+        "name": "Spotify: Browsing through genres not possible anymore",
+        "snippet": "Nov 14, 2019 — Dear Sonos team/community,since one of the more recent Sonos Controller updates, the experience when browsing Spotify through the controller application ...",
+        "host": "en.community.sonos.com",
+        "date": "Nov 14, 2019"
+      },
+      {
+        "url": "https://community.spotify.com/t5/Desktop-Windows/Can-t-I-search-a-genre-on-desktop-app-like-mobile-does/td-p/5222305",
+        "name": "Can't I search a genre on desktop app like mobile does?",
+        "snippet": "Jun 14, 2021 — Is this a feature not available on desktop app right now? I use this to get to the genre page that i cannot find on \" browse all \". Read more",
+        "host": "community.spotify.com",
+        "date": "Jun 14, 2021"
+      },
+      {
+        "url": "https://community.spotify.com/t5/Desktop-Windows/quot-see-all-quot-option-not-showing-up-for-searches/td-p/5379415",
+        "name": "\"see all\" option not showing up for searches",
+        "snippet": "May 8, 2022 — The \" See all \" button has been removed and now instead, you can click on one of the buttons right under the search bar: \" All / Songs/ Artists/ ...",
+        "host": "community.spotify.com",
+        "date": "May 8, 2022"
+      }
+    ]
+  },
+  "context-menu": {
+    "query": "Spotify context menu long press track options add to queue go to artist radio",
+    "results": [
+      {
+        "url": "https://community.spotify.com/t5/Desktop-Windows/The-context-menu-when-right-clicking-a-song-should-be/td-p/5624465",
+        "name": "The context menu when right-clicking a song should",
+        "snippet": "Aug 17, 2023 · Spotify has recently moved the \"Add to queue\" context menu item further down the list, it used to be on top. When I right click a song within a ...",
+        "host": "community.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://support.spotify.com/us/article/play-queue",
+        "name": "Play Queue - Spotify Support",
+        "snippet": "Add tracks Tap 3 horizontal dots (iOS) / 3 vertical dots (Android) next to the track you want to add, then tap Add to Queue. Or you can swipe right on a track ...",
+        "host": "support.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.reddit.com/r/truespotify/comments/1mgv1a6/why_cant_spotify_just_add_to_the_end_of_the_queue",
+        "name": "Why can't Spotify just add to the end of the queue? : r/truespotify - Reddit",
+        "snippet": "Aug 3, 2025 · 1. Start playing a full album (not a single song). · 2. While it's playing, go find a different album. · 3. Tap the three dots and select “Add to ... An option in Spotify to set it so that when you tap a song it is added to ... The context menu for individual songs features a lot of useless options More results from www.reddit.com",
+        "host": "www.reddit.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Implemented-Ideas/Radio-Bring-back-Playlist-Radio-context-menu-option-for/idi-p/4637742/page/8",
+        "name": "[Radio] Bring back Playlist Radio context menu opt - Page 8",
+        "snippet": "Dec 22, 2018 · the playlist radio context menu has been removed with our current update. There you'll see the option to select 'Go to Song/Album/Playlist ...",
+        "host": "community.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://community.spotify.com/t5/Android/quot-Up-Next-quot-or-Queue-Not-Matching-List-of-Songs-In-Radios/td-p/5304709",
+        "name": "\"Up Next\" or Queue Not Matching List of Songs In Radios",
+        "snippet": "Nov 27, 2021 · in the \"up next\" section, you can tap on the three dots menu next to one of the songs, and the context menu includes an option to \"go to queue. ...",
+        "host": "community.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://github.com/orgs/music-assistant/discussions/2895",
+        "name": "Treat Queue and current Playlist/Radio separately like Spotify",
+        "snippet": "Sep 10, 2024 · So in Spotify when you select a playlist or radio and set it to shuffle or play sequentially you can still add things to the top of the queue ...",
+        "host": "github.com",
+        "date": ""
+      }
+    ]
+  },
+  "playstore": {
+    "query": "Spotify app Play Store screenshots description UI breakdown 2024 2025",
+    "results": [
+      {
+        "url": "https://www.reddit.com/r/spotify/comments/mnjb2j/screenshots_of_the_new_ui",
+        "name": "Screenshots of the new UI : r/spotify - Reddit",
+        "snippet": "Apr 9, 2021 · Since lots of posts have comments asking what the new UI looks like, here are some screenshots from the MacOS (Big Sur) version. My Spotify app is very updated but the New UI isn't applied ... - Reddit I recreated Spotify App Store Screenshots in under one minute (live ... More results from www.reddit.com",
+        "host": "www.reddit.com",
+        "date": ""
+      },
+      {
+        "url": "https://newsroom.spotify.com/2025-11-28/spotify-app-update-wrapped-features",
+        "name": "4 Reasons Why Keeping Your Spotify App Updated Matters and",
+        "snippet": "Nov 28, 2025 · In 2025, updates have included: Lossless: Hear every detail of your favorite music yet. Mixing Tools: Add track-to-track transitions in your ...",
+        "host": "newsroom.spotify.com",
+        "date": ""
+      },
+      {
+        "url": "https://appscreenmagic.com/top-screenshots/spotify",
+        "name": "Spotify App Store Screenshots: 4 Examples & Patterns - ScreenMagic",
+        "snippet": "See Spotify's App Store screenshots up close. 4 design patterns explained with real screenshots breakdown, plus proven lessons to ship better screenshots in ...",
+        "host": "appscreenmagic.com",
+        "date": ""
+      },
+      {
+        "url": "https://screensdesign.com/showcase/spotify-music-and-podcasts",
+        "name": "App Showcase: Spotify: Music and Podcasts - ScreensDesign",
+        "snippet": "Rating 4.8 (41,438,130) Go deeper ScreensDesign has full app videos, paywalls, onboarding flows, and app store screenshots across 2450+ apps. Spotify: Music and Podcasts UI Breakdown",
+        "host": "screensdesign.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.pinterest.com/ideas/spotify-ui-mobile/895974205464",
+        "name": "Spotify Ui Mobile - Pinterest",
+        "snippet": "Find and save ideas about spotify ui mobile. Spotify play screen Create Custom. UI & UX design inspiration for mobile & web apps Music Player UI | Simple music ...",
+        "host": "www.pinterest.com",
+        "date": ""
+      },
+      {
+        "url": "https://uiland.design/screens/spotify/screens/f8d9c62c-474c-4e3a-8eb4-a5ae98dee181/app-store",
+        "name": "Spotify App Screenshots, UI Screens & Design Inspiration - Uiland",
+        "snippet": "Explore 1877 Spotify app screenshots on Uiland for real mobile UI inspiration, screen patterns, and product design research.",
+        "host": "uiland.design",
+        "date": ""
+      }
+    ]
+  },
+  "spotify-design": {
+    "query": "spotify.design Encore design system components tokens engineering",
+    "results": [
+      {
+        "url": "https://www.intodesignsystems.com/blog/how-spotify-design-system-ai-ready",
+        "name": "How Spotify Is Making Their Design System AI-Ready",
+        "snippet": "Feb 22, 2026 · Spotify is making its design system Encore AI-ready by exposing it through an MCP server, rewriting documentation to be machine-readable and ...",
+        "host": "www.intodesignsystems.com",
+        "date": ""
+      },
+      {
+        "url": "https://medium.com/spotify-design/reimagining-design-systems-at-spotify-2fe20fbb3552",
+        "name": "Reimagining Design Systems at Spotify - Medium",
+        "snippet": "Jul 8, 2020 · The components are built using tokens, and they follow the patterns and guidelines defined in Foundation. So the systems aren't stand-alone ...",
+        "host": "medium.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.figma.com/blog/creating-coherence-how-spotifys-design-system-goes-beyond-platforms",
+        "name": "How Spotify's Design System Goes Beyond Platforms | Figma Blog",
+        "snippet": "Aug 31, 2023 · We adopted design tokens for foundational design decisions, such as color schemes and type styles. Encore is made up of two subsystems (Mobile ...",
+        "host": "www.figma.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.youtube.com/watch?v=_DKuMRgTaUA",
+        "name": "The Future of Design Systems is automated - Spotify at Into Design",
+        "snippet": "Jan 1, 2025 · designsystems #designtokens #designsystem The Future of Design Systems is automated - live with Juli Sombat and Tiago Catita from Spotify at ...",
+        "host": "www.youtube.com",
+        "date": ""
+      },
+      {
+        "url": "https://iamtyce.com/blog/can-i-get-an-encore-spotifys-design-system-three-years-on",
+        "name": "Can I get an Encore? Spotify's Design System, Three Years On - Tyce Clee",
+        "snippet": "Our next step is to evolve our analytics system so that we can identify opportunities in codebases where tokens and components could be used, but aren't yet.",
+        "host": "iamtyce.com",
+        "date": ""
+      },
+      {
+        "url": "https://www.layreight.de/en-us/posts/spotify-design-system-ai-agents",
+        "name": "How Spotify Is Redesigning Its Design System for AI Agents - Layr Eight",
+        "snippet": "Spotify built an MCP server for Encore. MCP (Model Context Protocol) makes design system rules, tokens, and component specs directly consumable by AI agents.",
+        "host": "www.layreight.de",
+        "date": ""
+      }
+    ]
+  }
+}
