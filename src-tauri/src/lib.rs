@@ -119,6 +119,67 @@ fn res(app: &AppHandle, rel: &str) -> Result<PathBuf, String> {
         .map_err(|e| format!("resource_dir: {e}"))
 }
 
+/// Percent-encode a filesystem path for use in a Prisma SQLite `file:` URL.
+/// macOS app-data lives under "~/Library/Application Support" — the SPACE in
+/// an unencoded URL makes Prisma fail to open the database (every query
+/// throws → the engine health gate never passes). Prisma's documented
+/// guidance for special characters in `file:` URLs: percent-encode them.
+fn encode_file_url(p: &std::path::Path) -> String {
+    let s = p.to_string_lossy();
+    let mut out = String::with_capacity(s.len() + 8);
+    for c in s.chars() {
+        match c {
+            '%' => out.push_str("%25"),
+            ' ' => out.push_str("%20"),
+            '#' => out.push_str("%23"),
+            '?' => out.push_str("%3F"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Self-heal Gatekeeper: a downloaded bundle carries the
+/// `com.apple.quarantine` xattr on EVERY nested file. The main binary gets
+/// unblocked by the user ("Allow Anyway" / First-Run script), but spawned
+/// helper binaries (the bundled bun / yt-dlp / deno) are assessed SEPARATELY
+/// at exec — a quarantined child is SIGKILL'd silently, the engine never
+/// listens, and boot times out at 120s. Stripping the flag from our own
+/// Resources needs no privileges (we own the files) and makes the engine
+/// boot even if the user never ran First-Run-MacOS.command.
+fn strip_quarantine(app: &AppHandle) {
+    if let Ok(root) = res(app, "") {
+        let _ = Command::new("/usr/bin/xattr")
+            .args(["-r", "-d", "com.apple.quarantine"])
+            .arg(&root)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+}
+
+/// Last `max` characters of a child-process log, newlines flattened so the
+/// text can ride inside the boot-error CustomEvent on the fallback page.
+fn log_tail(app: &AppHandle, name: &str, max: usize) -> String {
+    let Ok(dir) = app.path().app_log_dir() else { return String::new() };
+    let Ok(raw) = std::fs::read_to_string(dir.join(format!("{name}.log"))) else {
+        return String::new();
+    };
+    let tail: String = raw
+        .chars()
+        .rev()
+        .take(max)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    let mut flat = tail.replace(['\r', '\n'], " | ");
+    while flat.contains("  ") {
+        flat = flat.replace("  ", " ");
+    }
+    flat.trim().to_string()
+}
+
 fn log_stdio(app: &AppHandle, name: &str) -> Result<Stdio, String> {
     let dir = app
         .path()
@@ -210,6 +271,7 @@ fn kill_children(app: &AppHandle) {
 
 fn boot_services_inner(app: &AppHandle, win: Option<&WebviewWindow>) -> Result<u16, String> {
     boot_status(win, "Preparing the local engine…");
+    strip_quarantine(app);
 
     let runtime_bun = res(app, "resources/runtime/bun")?;
     let server_dir = res(app, "resources/server")?;
@@ -218,7 +280,7 @@ fn boot_services_inner(app: &AppHandle, win: Option<&WebviewWindow>) -> Result<u
     let db_res = res(app, "resources/db/tsf.db")?;
 
     #[cfg(unix)]
-    for p in [&runtime_bun, &bin_dir.join("yt-dlp")] {
+    for p in [&runtime_bun, &bin_dir.join("yt-dlp"), &bin_dir.join("deno")] {
         let _ = std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o755));
     }
 
@@ -263,8 +325,10 @@ fn boot_services_inner(app: &AppHandle, win: Option<&WebviewWindow>) -> Result<u
         .env("NODE_ENV", "production")
         .env("PORT", port.to_string())
         .env("HOSTNAME", "127.0.0.1")
-        .env("DATABASE_URL", format!("file:{}", db_path.display()))
+        // percent-encoded: "Application Support" contains a space
+        .env("DATABASE_URL", format!("file:{}", encode_file_url(&db_path)))
         .env("TSF_POT_URL", format!("http://127.0.0.1:{pot_port}"))
+        .env("TSF_YTDLP_BIN", bin_dir.join("yt-dlp").display().to_string())
         .env("TSF_RESOURCES", resource_root.display().to_string())
         .env("NEXT_TELEMETRY_DISABLED", "1")
         .env("PATH", &path_var)
@@ -284,12 +348,49 @@ fn boot_services_inner(app: &AppHandle, win: Option<&WebviewWindow>) -> Result<u
     let addr = format!("127.0.0.1:{port}");
     let deadline = Instant::now() + Duration::from_secs(120);
     while Instant::now() < deadline {
+        // FAIL FAST: if the engine process died (Gatekeeper kill of a
+        // quarantined helper, darwin-incompatible runtime, crash on boot…)
+        // surface the exit status + the tail of its log NOW instead of
+        // polling a dead port for the full 120 seconds.
+        {
+            let st = app.state::<ChildProcs>();
+            if let Ok(mut guard) = st.server.lock() {
+                if let Some(child) = guard.as_mut() {
+                    match child.try_wait() {
+                        Ok(Some(status)) => {
+                            let code = match status.code() {
+                                Some(c) => format!("exit code {c}"),
+                                None => "killed by a signal (macOS may have blocked the binary)"
+                                    .into(),
+                            };
+                            let mut msg = format!("The music engine process died ({code}).");
+                            let tail = log_tail(app, "server", 700);
+                            if !tail.is_empty() {
+                                msg.push_str(&format!(" Last log: {tail}"));
+                            }
+                            msg.push_str(" — full logs: ~/Library/Logs/com.tsfmusic.desktop");
+                            return Err(msg);
+                        }
+                        Ok(None) => {}
+                        Err(e) => return Err(format!("engine status check failed: {e}")),
+                    }
+                }
+            }
+        }
         if http_ok(&addr, "/api/health") {
             return Ok(port);
         }
         std::thread::sleep(Duration::from_millis(250));
     }
-    Err("engine did not become healthy within 120s (see ~/Library/Logs/com.tsfmusic.desktop)".into())
+    let tail = log_tail(app, "server", 400);
+    let hint = if tail.is_empty() {
+        "The engine produced no log output.".to_string()
+    } else {
+        format!("Last log: {tail}")
+    };
+    Err(format!(
+        "The engine did not become healthy within 120s. {hint} — full logs: ~/Library/Logs/com.tsfmusic.desktop"
+    ))
 }
 
 fn boot_task(app: AppHandle) {
@@ -308,10 +409,13 @@ fn boot_task(app: AppHandle) {
                 win.eval(&format!("location.replace('http://127.0.0.1:{}/')", outcome.port));
         }
     } else {
-        let msg = outcome.error.replace(['\'', '"', '\\'], "");
+        // JSON-encode the detail: log tails contain quotes/newlines that a
+        // hand-quoted JS string literal would break on.
+        let detail = serde_json::to_string(&outcome.error)
+            .unwrap_or_else(|_| "\"the engine failed to start\"".into());
         if let Some(win) = win {
             let _ = win.eval(&format!(
-                "window.dispatchEvent(new CustomEvent('tsf-boot-error', {{ detail: '{msg}' }}))"
+                "window.dispatchEvent(new CustomEvent('tsf-boot-error', {{ detail: {detail} }}))"
             ));
         }
     }

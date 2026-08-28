@@ -29,7 +29,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  BUN_VERSION: "1.3.4"
+  BUN_VERSION: "1.4.0"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -162,6 +162,73 @@ jobs:
             "TSF-Music-${VERSION}-${ARCH}.dmg"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "ARCH=${ARCH}" >> "$GITHUB_ENV"
+
+      # -----------------------------------------------------------------------
+      # GAUNTLET BAR: the shipped .app must boot its OWN bundled engine.
+      # The probe job runs bun on LINUX; only this step executes the exact
+      # packaged Mach-O bun + server + db on real darwin — catching quarantine-
+      # adjacent issues, darwin-only runtime crashes and the space-containing
+      # DATABASE_URL ("Application Support") that the v0.1.0 build shipped with.
+      # -----------------------------------------------------------------------
+      - name: Smoke — boot the packaged engine exactly like the shell
+        run: |
+          APP="src-tauri/target/${{ matrix.target }}/release/bundle/macos/TSF Music.app"
+          RES="$APP/Contents/Resources"
+          test -x "$RES/resources/runtime/bun" || { echo "::error::bundled bun missing/not executable"; exit 1; }
+          test -f "$RES/resources/server/server.js" || { echo "::error::server.js missing in bundle"; exit 1; }
+          test -f "$RES/resources/pot-provider/index.js" || { echo "::error::pot-provider missing"; exit 1; }
+          test -x "$RES/resources/bin/yt-dlp" || { echo "::error::yt-dlp missing"; exit 1; }
+          "$RES/resources/bin/yt-dlp" --version
+
+          # x64 bundle runs under Rosetta on this arm64 runner — install if absent
+          if [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
+            /usr/bin/pgrep -q oahd || softwareupdate --install-rosetta --agree-to-license >/dev/null 2>&1 || true
+          fi
+
+          # Space-containing data dir — regression-tests the percent-encoded
+          # DATABASE_URL the shell builds for "~/Library/Application Support"
+          SMOKE="$HOME/Library/Application Support/tsf-smoke"
+          mkdir -p "$SMOKE"
+          cp "$RES/resources/db/tsf.db" "$SMOKE/tsf.db"
+          DBURL="file:$(echo "$SMOKE/tsf.db" | sed 's/ /%20/g')"
+          echo "smoke DATABASE_URL: $DBURL"
+
+          env PORT=4416 "$RES/resources/runtime/bun" \
+            "$RES/resources/pot-provider/index.js" > /tmp/smoke-pot.log 2>&1 &
+          POT_PID=$!
+          (
+            cd "$RES/resources/server"
+            env NODE_ENV=production PORT=3199 HOSTNAME=127.0.0.1 DATABASE_URL="$DBURL" \
+              TSF_POT_URL=http://127.0.0.1:4416 TSF_RESOURCES="$RES" \
+              TSF_YTDLP_BIN="$RES/resources/bin/yt-dlp" NEXT_TELEMETRY_DISABLED=1 \
+              PATH="$RES/resources/bin:$PATH" \
+              "$RES/resources/runtime/bun" server.js > /tmp/smoke-server.log 2>&1
+          ) &
+          SRV_PID=$!
+
+          OK=0
+          for i in $(seq 1 90); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3199/api/health || true)
+            if [ "$CODE" = "200" ]; then echo "packaged engine healthy after ${i}s"; OK=1; break; fi
+            sleep 1
+          done
+          kill $POT_PID $SRV_PID 2>/dev/null || true
+          pkill -f "resources/server/server.js" 2>/dev/null || true
+          pkill -f "resources/pot-provider/index.js" 2>/dev/null || true
+          if [ "$OK" != "1" ]; then
+            echo "::error::packaged engine did not become healthy — logs:"
+            tail -40 /tmp/smoke-server.log || true
+            tail -20 /tmp/smoke-pot.log || true
+            exit 1
+          fi
+          curl -fsS http://127.0.0.1:3199/api/health | head -c 400; echo
+          ROOT_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3199/ || true)
+          echo "engine root page: HTTP $ROOT_CODE"
+          if [ "$ROOT_CODE" != "200" ]; then
+            echo "::error::engine root page did not return 200"
+            exit 1
+          fi
+          rm -rf "$SMOKE"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

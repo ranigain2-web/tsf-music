@@ -15,7 +15,7 @@ set -euo pipefail
 TARGET_TRIPLE="${1:?usage: prepare-mac-resources.sh <target-triple>}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 RES="$ROOT/src-tauri/resources"
-BUN_VERSION="${BUN_VERSION:-1.3.4}"
+BUN_VERSION="${BUN_VERSION:-1.4.0}"
 
 case "$TARGET_TRIPLE" in
   aarch64-apple-darwin)
