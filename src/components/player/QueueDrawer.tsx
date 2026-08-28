@@ -14,9 +14,14 @@ import { QueuePanel } from './QueuePanel'
 
 export function QueueDrawer() {
   const open = usePlayer((s) => s.queueOpen)
+  const nowPlayingOpen = usePlayer((s) => s.nowPlayingOpen)
   const toggleQueue = usePlayer((s) => s.toggleQueue)
 
-  if (!open) return null
+  // While the full-screen Now Playing view is up, its own inline queue panel
+  // is the visible queue — the drawer would render a duplicate behind the
+  // overlay (double rows in the DOM, wasted render, confusing hit-testing).
+  // It reappears when the NP view closes since queueOpen stays true.
+  if (!open || nowPlayingOpen) return null
   return (
     <>
       <div

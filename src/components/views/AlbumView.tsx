@@ -71,7 +71,7 @@ export function AlbumView({ id }: { id: string }) {
       {/* hero */}
       <header className="bg-gradient-to-b from-[#3d3d3d] to-[#1f1f1f] px-4 lg:px-6 pt-6 pb-6 flex gap-6 items-end">
         {thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element
+           
           <img src={thumbnail} alt={title} className="w-[140px] h-[140px] lg:w-[232px] lg:h-[232px] object-cover rounded shadow-[0_16px_48px_rgba(0,0,0,0.6)] shrink-0" />
         ) : (
           <div className="w-[140px] h-[140px] lg:w-[232px] lg:h-[232px] bg-[#282828] rounded shrink-0" />

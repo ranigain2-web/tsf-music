@@ -113,7 +113,7 @@ export function AiGeneratedView({ endpoint, title, subtitle, gradient, emoji }: 
         style={{ background: `linear-gradient(180deg, ${heroGradient[0]} 0%, ${heroGradient[1]} 100%)` }}
       >
         {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
+           
           <img src={cover} alt="" className="w-[140px] h-[140px] lg:w-[232px] lg:h-[232px] object-cover rounded shadow-[0_16px_48px_rgba(0,0,0,0.6)] shrink-0" />
         ) : (
           <div

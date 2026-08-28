@@ -58,7 +58,7 @@ export function ArtistView({ id }: { id: string }) {
       {/* hero */}
       <header className="relative h-[340px] lg:h-[400px] flex items-end px-4 lg:px-6 pb-6 overflow-hidden">
         {thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element
+           
           <img src={thumbnail} alt={name} className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-b from-[#503750] to-[#1f1f1f]" />
@@ -174,7 +174,7 @@ export function ArtistView({ id }: { id: string }) {
                 onClick={() => playQueue(s.tracks as PlayerTrack[], i, `${name} — ${s.title}`)}
               >
                 <div className="relative mb-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  { }
                   <img src={t.thumbnail} alt={t.title} className="w-full aspect-square object-cover rounded" loading="lazy" />
                 </div>
                 <div className="text-[15px] font-semibold text-white truncate">{t.title}</div>

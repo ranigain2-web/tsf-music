@@ -305,7 +305,7 @@ export function AudioEngine() {
         })
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [queueIndex, queueVersion])
 
   // ---- play / pause (toggle from UI) ----
@@ -388,7 +388,7 @@ export function AudioEngine() {
       }, (d - 1) * 120)
     }
     return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [queueIndex, queueVersion])
 
   return (

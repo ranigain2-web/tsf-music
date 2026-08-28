@@ -182,6 +182,26 @@ body {
   transform: translateY(0);
 }
 
+/* Spotify's signature "now playing" equalizer — 3 green bars dancing */
+.tsf-eq-bar {
+  display: inline-block;
+  background: #1ed760;
+  border-radius: 1px;
+  animation: tsf-eq 1s ease-in-out infinite;
+  transform-origin: bottom;
+}
+.tsf-eq-2 { animation-delay: 0.15s; animation-duration: 0.9s; }
+.tsf-eq-3 { animation-delay: 0.3s; animation-duration: 1.1s; }
+@keyframes tsf-eq {
+  0%, 100% { transform: scaleY(0.35); }
+  25% { transform: scaleY(1); }
+  50% { transform: scaleY(0.55); }
+  75% { transform: scaleY(0.85); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tsf-eq-bar { animation: none; transform: scaleY(0.7); }
+}
+
 /* ---------------- Touch devices (phones / tablets) ----------------
  * Hover-only affordances don't exist on touch — make them always visible.
  * Matches Spotify mobile: play buttons on cards, like/add/download in rows.

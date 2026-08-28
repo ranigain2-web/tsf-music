@@ -83,7 +83,7 @@ function Field({ label, value, multiline, chips }: {
           {chips.map((c) => (
             <span key={c.label} className="inline-flex items-center gap-1.5 bg-white/5 rounded-full pl-1 pr-2.5 py-0.5">
               {c.thumbnail ? (
-                // eslint-disable-next-line @next/next/no-img-element
+                 
                 <img src={c.thumbnail} alt="" className="w-5 h-5 rounded-full object-cover" referrerPolicy="no-referrer" />
               ) : null}
               <span className="text-white text-xs font-medium">{c.label}</span>

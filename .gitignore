@@ -52,3 +52,15 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# native shells — build outputs & transient state only (projects are committed)
+android/.gradle
+android/app/build
+android/build
+android/local.properties
+ios/App/App/public
+ios/App/App/capacitor.config.json
+ios/DerivedData
+ios/App/output
+*.ipa
+*.xcarchive
