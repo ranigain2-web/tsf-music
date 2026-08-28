@@ -51,10 +51,12 @@ curl -fsSL "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_mac
 chmod +x "$RES/bin/yt-dlp"
 
 # 3) deno (yt-dlp EJS challenge solver) --------------------------------------
+# NOTE: use the releases/latest/download web redirect — the GitHub REST API
+# (api.github.com/repos/.../releases/latest) 403s on shared runner IPs.
 echo "▶ deno (latest release)"
-DENO_TAG="$(curl -fsSL https://api.github.com/repos/denoland/deno/releases/latest | /usr/bin/python3 -c 'import json,sys;print(json.load(sys.stdin)["tag_name"])')"
-echo "  deno tag: $DENO_TAG"
-curl -fsSL "https://github.com/denoland/deno/releases/download/${DENO_TAG}/${DENO_ASSET}" -o /tmp/deno.zip
+curl -fsSL --retry 4 --retry-delay 5 \
+  "https://github.com/denoland/deno/releases/latest/download/${DENO_ASSET}" \
+  -o /tmp/deno.zip
 rm -rf /tmp/deno-extract && unzip -q /tmp/deno.zip -d /tmp/deno-extract
 cp /tmp/deno-extract/deno "$RES/bin/deno"
 chmod +x "$RES/bin/deno"

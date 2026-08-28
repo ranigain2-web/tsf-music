@@ -41,13 +41,7 @@
     "macOS": {
       "minimumSystemVersion": "10.15",
       "hardenedRuntime": false,
-      "infoPlist": {
-        "NSAppSleepDisabled": true,
-        "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true
-        },
-        "NSHumanReadableCopyright": "TSF Music"
-      }
+      "infoPlist": "macos/Info.plist"
     }
   }
 }
