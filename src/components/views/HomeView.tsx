@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Play, Sparkles, Wand2, Compass, Satellite, AlarmClock, Repeat2, type LucideIcon } from 'lucide-react'
+import { Play, Sparkles, Wand2, Compass, Satellite, AlarmClock, Repeat2, Mic2, BookOpenText, type LucideIcon } from 'lucide-react'
 import { usePlayer, type PlayerTrack } from '@/store/player'
 import { api, useNav } from '@/store/nav'
 import { useLibrary } from '@/store/library'
@@ -165,11 +165,47 @@ export function HomeView() {
   const name = data?.name || prefs.name
   const heading = name ? `${greeting}, ${name}` : greeting
 
+  // Spotify 2023+ home anatomy (BAR-B §2.2): filter chips Music / Podcasts /
+  // Audiobooks. TSF is music-only — non-music tabs get an honest empty state.
+  const [homeFilter, setHomeFilter] = useState<'music' | 'podcasts' | 'audiobooks'>('music')
+
   const cards = featured?.cards || []
   const moods = featured?.moods || []
 
   return (
     <div className="pb-8">
+      {/* Spotify 2023+ filter chips (BAR-B): active = white pill / black text,
+          inactive = #2a2a2a pill / white text, horizontal scroll row */}
+      <div className="px-4 lg:px-6 pt-3 pb-1 flex gap-2 overflow-x-auto no-scrollbar" role="tablist" aria-label="Home filter">
+        {([
+          ['music', 'Music'],
+          ['podcasts', 'Podcasts'],
+          ['audiobooks', 'Audiobooks'],
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            role="tab"
+            aria-selected={homeFilter === key}
+            onClick={() => setHomeFilter(key)}
+            className={`h-8 px-4 rounded-full text-[13px] font-medium whitespace-nowrap shrink-0 transition-colors ${
+              homeFilter === key ? 'bg-white text-black' : 'bg-[#2a2a2a] text-white hover:bg-[#3a3a3a]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {homeFilter !== 'music' ? (
+        <div className="flex flex-col items-center justify-center py-24 px-8 text-center" role="tabpanel">
+          <div className="w-16 h-16 rounded-full bg-white/[0.06] flex items-center justify-center mb-4">
+            {homeFilter === 'podcasts' ? <Mic2 size={26} className="text-white/40" /> : <BookOpenText size={26} className="text-white/40" />}
+          </div>
+          <p className="text-white font-bold mb-1">No {homeFilter === 'podcasts' ? 'podcasts' : 'audiobooks'} yet</p>
+          <p className="text-sm text-[#a7a7a7] max-w-[280px]">TSF is a music-only station — switch back to Music for the full drop.</p>
+        </div>
+      ) : (
+      <>
       {/* quick picks grid */}
       {quickPicks.length > 0 && (
         <section className="px-4 lg:px-6 pt-2 pb-6 tsf-rise">
@@ -383,6 +419,8 @@ export function HomeView() {
       <footer className="mt-10 px-4 lg:px-6 text-[11px] text-[#6a6a6a]">
         TSF Music · audio streams from YouTube via InnerTube · Lyrics by LRCLIB · Personalized with your onboarding preferences · Curated by TSF AI
       </footer>
+      </>
+      )}
 
       <AiPlaylistGenerator open={aiOpen} onOpenChange={setAiOpen} />
     </div>

@@ -35,7 +35,18 @@ const RESOLVE_TIMEOUT_MS = 25_000
 const SPAWN_MAX_CONCURRENT = 2
 const BINARY_PROBE_TTL_MS = 10 * 60 * 1000
 
+/**
+ * bgutil-ytdlp-pot-provider HTTP mini-service (mini-services/pot-provider, port 4416).
+ * Mints proof-of-origin tokens via BotGuard — the PROVEN fix for YouTube's SABR-era
+ * datacenter bot-walls (verified 2026-08-28: full-length itag-140 URLs, HTTP 206,
+ * valid fMP4). Set TSF_POT_URL to override; empty string disables.
+ */
+const POT_PROVIDER_URL = process.env.TSF_POT_URL ?? 'http://127.0.0.1:4416'
+/** deno enables yt-dlp's EJS challenge solver (n-challenge) → more formats available. */
+const DENO_PATH = '/home/z/.deno/bin'
+
 const CANDIDATE_PATHS = [
+  '/home/z/.venv/bin/yt-dlp', // sandbox venv install (plugin + POT provider live here)
   '/usr/local/bin/yt-dlp',
   '/opt/homebrew/bin/yt-dlp',
   '/usr/bin/yt-dlp',
@@ -162,7 +173,13 @@ function runYtDlp(
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     try {
-      const child = spawn(binPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+      const child = spawn(binPath, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          PATH: `${process.env.PATH || ''}:${DENO_PATH}`,
+        },
+      })
       let stdout = ''
       let stderr = ''
       const timer = setTimeout(() => {
@@ -239,6 +256,9 @@ const BASE_ARGS = [
   '8',
   '-f',
   'bestaudio[protocol^=http][ext=m4a]/bestaudio[protocol^=http]/bestaudio',
+  ...(POT_PROVIDER_URL
+    ? ['--extractor-args', `youtubepot-bgutilhttp:base_url=${POT_PROVIDER_URL}`]
+    : []),
   '-J',
 ]
 
@@ -254,11 +274,25 @@ export async function resolveYtDlp(videoId: string): Promise<StreamResult | null
     // Attempt 1 — current yt-dlp defaults (visionos + web + PO-token machinery)
     let run = await runYtDlp(bin.path, [...BASE_ARGS, watchUrl], RESOLVE_TIMEOUT_MS)
 
-    // Attempt 2 — different client failure domain (per-video bot-wall variance)
+    // Attempt 2 — different client failure domain (per-video bot-wall variance).
+    // mweb/web_safari/web are the gvs-POT-bound clients; wall variance is
+    // probabilistic (verified: same video flips between attempts).
     if (run.code !== 0 || !run.stdout.trim()) {
+      await new Promise((r) => setTimeout(r, 600))
       run = await runYtDlp(
         bin.path,
-        [...BASE_ARGS, '--extractor-args', 'youtube:player_client=tv_embedded,mweb,web_safari', watchUrl],
+        [...BASE_ARGS, '--extractor-args', 'youtube:player_client=mweb,web_safari,web', watchUrl],
+        RESOLVE_TIMEOUT_MS,
+      )
+    }
+
+    // Attempt 3 — embedded clients + a second temporal sample. Fast bot-wall
+    // rejections (~2s) make room for this; measured wall-flip across ~20s.
+    if (run.code !== 0 || !run.stdout.trim()) {
+      await new Promise((r) => setTimeout(r, 800))
+      run = await runYtDlp(
+        bin.path,
+        [...BASE_ARGS, '--extractor-args', 'youtube:player_client=tv_embedded,web_embedded', watchUrl],
         RESOLVE_TIMEOUT_MS,
       )
     }

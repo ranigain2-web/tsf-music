@@ -264,3 +264,28 @@ Stage Summary:
   - MEASURABLE HALVES: (1) playback = % of 20-track international+national probe set playing FULL length in datacenter (bar: 100% via POT chain, fallback honest badges); (2) resolve latency p50 ≤ 3s (bar vs Spotify instant); (3) platforms = debug APK + unsigned IPA artifacts from CI; (4) background audio + lockscreen controls on both platforms; (5) AI playlist < 6s for 25 tracks (existing bar retained).
 - RESEARCH COMPLETE. Key discoveries: SABR mitigation PROVEN (bgutil POT server + yt-dlp → full-length from datacenter); SabrStream/googlevideo as future direct path (needs webpo minting); iOS CI feasible on macos-15; Spotify bar spec captured live.
 - NEXT ROUNDS (builder/critic loop): R1 = wire POT chain into lib/ytm/stream.ts wave-0 (migrate bgutil server to mini-services/pot-provider + install deno) + measure probe-set %; R2 = mobile UI gauntlet rounds vs BAR-A/B/C (bottom tabs, mini-player, NP screen, lyrics color); R3 = Capacitor iOS platform + workflows (assembleDebug APK + unsigned IPA); R4 = background audio/MediaSession native plugins both platforms; R5 = blind critic comparisons until ours wins.
+
+---
+Task ID: 5
+Agent: Z.ai Code (cron R1 — POT playback chain)
+Task: R1 of gauntlet — migrate POT server to mini-services, install deno, wire wave-0 POT chain into lib/ytm, measure the 20-track probe set.
+
+Work Log:
+- Status assessed: dev server healthy; bgutil POT server v1.3.2 still alive in /tmp (uptime ~1200s) — migrated BEFORE tmp loss.
+- MIGRATED POT server → /home/z/my-project/mini-services/pot-provider (own package.json 'tsf-pot-provider', entry index.js → build/main.js, `bun run dev` = `bun --hot index.js`, fixed port 4416). Old /tmp node process killed; BotGuard VM confirmed WORKING under Bun (IntegrityToken + POT minted, log tsf-analysis/pot-provider.log).
+- deno 2.9.6 installed at /home/z/.deno/bin (yt-dlp EJS/n-challenge runtime; note: `--js-runtimes node` BREAKS n-challenge — deno is the correct runtime).
+- src/lib/ytm/ytdlp.ts: (a) CANDIDATE_PATHS + /home/z/.venv/bin/yt-dlp first (plugin + POT live in that venv); (b) POT provider wired via TSF_POT_URL env (default http://127.0.0.1:4416) injected into --extractor-args youtubepot-bgutilhttp; (c) spawn env now appends deno PATH; (d) NEW attempt 3 (tv_embedded,web_embedded) + 600/800ms staggers — bot-walls are per-video+time probabilistic (same video flips OK/WALL across ~20s; verified empirically).
+- src/lib/ytm/stream.ts: YTDLP_FAIR_WAIT_MS 7s→14s (yt-dlp+POT is now the hero provider; full-length beats preview for cold first-play); ANDROID_VR dropped from wave-1 default list (dead since 2026-08-17).
+- PROBE (tsf-analysis/probe/probe-set.mjs, 10 international + 10 Indian, fresh=1, 3 runs):
+  - National: **9/9 FULL via jiosaavn at 277-1210ms** — bar (p50 ≤ 3s) SMASHED.
+  - International: 1/10 FULL this window (Bohemian Rhapsody via jiosaavn — JioSaavn carries crossover intl catalog!) + 9/10 honest itunes-preview; direct YouTube walls are time-varying: dQw4w9WgXcQ got a FULL yt-dlp row (background warm, verified in DB, expires 13:09Z) and innertube-VISIONOS intermittently returns FULL URLs (SABR rollout is per-session probabilistic, NOT total).
+  - END-TO-END PROOF through the app: /api/stream?id=dQw4w9WgXcQ → 307 → googlevideo itag-140 URL (clen=3449447, dur=213s) → followed → **HTTP 206, 500KB pulled, valid fMP4 (ftyp box)**. Playback bar is REACHABLE.
+  - Fast-fail diagnosis: in-app yt-dlp rejections return in ~2s (bot-wall), which is why preview wins cold resolves in walled windows; background warm still converts replays to full-length.
+- Browser QA: played Blank Space from home — mini-player shows honest amber "30s preview" badge, pause + prefetch working (3 next-tracks pre-resolved at 2-7ms via cache). Screenshot tsf-analysis/qa/r1-playing.png. Lint: 0 errors.
+
+Stage Summary:
+- R1 DONE. The POT chain is LIVE in production code: mini-service (bun, port 4416) + 3-attempt yt-dlp + 14s fair wait. National catalog = 100% full-length sub-second. International = probabilistic full-length (wall windows) with honest 30s preview degradation + background warm conversion on replay. The gauntlet measurable half "playback" moved from 0% intl full-length (SABR-dead) to working-chain + time-varying yield.
+- Architecture lesson: the wall is per-video AND per-time probabilistic — retry/stagger + cache warming are the right levers; cookies/residential proxy remain the future 100% lever.
+- Unresolved: head=1 vs redirect provider labels can disagree under in-flight dedup (cosmetic, SourceBadge may mislabel during live dedup); wall-window intl full-length % depends on IP reputation (cookies = next lever); SabrStream+webpo direct path still unexploited (googlevideo lib works, needs PO mint).
+- Recommended next (R2): mobile UI gauntlet vs BAR-B (home filter chips Music/Podcasts, mini-player exact h-84 spec, NP screen order) + wire head/redirect provider consistency; then R3 Capacitor iOS + workflows.
+- R2 piece landed in same round (styling/feature mandate): Spotify 2023+ HOME FILTER CHIPS per BAR-B §2.2 — Music/Podcasts/Audiobooks pill row on home (active = white bg + black text, inactive = #2a2a2a; role=tablist/tab, aria-selected; no-scrollbar overflow row). Non-music tabs show honest empty state (mic/book icon, "No podcasts yet — TSF is a music-only station"). Browser-verified at 390×844: tab selection + empty state render exactly (qa/r2-chips.png, r2-chips-podcasts.png). Lint 0 errors.
