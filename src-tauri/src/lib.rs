@@ -269,6 +269,32 @@ fn kill_children(app: &AppHandle) {
     kill_slot(&st.pot);
 }
 
+/// FAIL FAST probe: Some(reason) = the engine process died (all MutexGuard
+/// temporaries stay inside this fn — the if-let-scrutinee + early-return
+/// combo in the caller tripped E0597, same lesson as `kill_slot` above).
+fn server_exit_message(app: &AppHandle) -> Option<String> {
+    let st = app.state::<ChildProcs>();
+    let mut guard = st.server.lock().ok()?;
+    let child = guard.as_mut()?;
+    match child.try_wait() {
+        Ok(Some(status)) => {
+            let code = match status.code() {
+                Some(c) => format!("exit code {c}"),
+                None => "killed by a signal (macOS may have blocked the binary)".into(),
+            };
+            let mut msg = format!("The music engine process died ({code}).");
+            let tail = log_tail(app, "server", 700);
+            if !tail.is_empty() {
+                msg.push_str(&format!(" Last log: {tail}"));
+            }
+            msg.push_str(" — full logs: ~/Library/Logs/com.tsfmusic.desktop");
+            Some(msg)
+        }
+        Ok(None) => None,
+        Err(e) => Some(format!("engine status check failed: {e}")),
+    }
+}
+
 fn boot_services_inner(app: &AppHandle, win: Option<&WebviewWindow>) -> Result<u16, String> {
     boot_status(win, "Preparing the local engine…");
     strip_quarantine(app);
@@ -348,34 +374,12 @@ fn boot_services_inner(app: &AppHandle, win: Option<&WebviewWindow>) -> Result<u
     let addr = format!("127.0.0.1:{port}");
     let deadline = Instant::now() + Duration::from_secs(120);
     while Instant::now() < deadline {
-        // FAIL FAST: if the engine process died (Gatekeeper kill of a
-        // quarantined helper, darwin-incompatible runtime, crash on boot…)
-        // surface the exit status + the tail of its log NOW instead of
-        // polling a dead port for the full 120 seconds.
-        {
-            let st = app.state::<ChildProcs>();
-            if let Ok(mut guard) = st.server.lock() {
-                if let Some(child) = guard.as_mut() {
-                    match child.try_wait() {
-                        Ok(Some(status)) => {
-                            let code = match status.code() {
-                                Some(c) => format!("exit code {c}"),
-                                None => "killed by a signal (macOS may have blocked the binary)"
-                                    .into(),
-                            };
-                            let mut msg = format!("The music engine process died ({code}).");
-                            let tail = log_tail(app, "server", 700);
-                            if !tail.is_empty() {
-                                msg.push_str(&format!(" Last log: {tail}"));
-                            }
-                            msg.push_str(" — full logs: ~/Library/Logs/com.tsfmusic.desktop");
-                            return Err(msg);
-                        }
-                        Ok(None) => {}
-                        Err(e) => return Err(format!("engine status check failed: {e}")),
-                    }
-                }
-            }
+        // FAIL FAST: if the engine process died (bad packaged layout,
+        // Gatekeeper kill of a quarantined helper, darwin-incompatible
+        // runtime, crash on boot…) surface the exit status + the tail of
+        // its log NOW instead of polling a dead port for 120 seconds.
+        if let Some(msg) = server_exit_message(app) {
+            return Err(msg);
         }
         if http_ok(&addr, "/api/health") {
             return Ok(port);
