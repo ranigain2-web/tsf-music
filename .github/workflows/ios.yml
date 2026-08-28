@@ -107,10 +107,10 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
+            SYMROOT=build/DerivedData/Build/Products \
             MARKETING_VERSION=1.0.${RUN} \
             CURRENT_PROJECT_VERSION=${RUN} \
             build | tee build/xcodebuild.log | xcbeautify || {
@@ -121,7 +121,7 @@ jobs:
 
       - name: Verify .app output
         run: |
-          APP=$(find ios/build/DerivedData/Build/Products -maxdepth 1 -name "*.app" | head -1)
+          APP=$(find ios/build/DerivedData/Build/Products -maxdepth 3 -name "*.app" | head -1)
           test -n "$APP" || { echo "No .app produced"; exit 1; }
           echo "Built: $APP"
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist"

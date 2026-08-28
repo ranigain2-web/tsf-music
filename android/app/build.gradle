@@ -25,7 +25,9 @@ android {
     // `signingConfigs.tsfRelease` eagerly, so declaration order matters.
     signingConfigs {
         tsfRelease {
-            if (System.getenv("TSF_KEYSTORE_FILE") != null) {
+            // treat empty-string env (CI with no keystore secret) as absent
+            def ksFile = System.getenv("TSF_KEYSTORE_FILE")
+            if (ksFile != null && !ksFile.trim().isEmpty()) {
                 storeFile = file(System.getenv("TSF_KEYSTORE_FILE"))
                 storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("ANDROID_KEY_ALIAS")
@@ -37,7 +39,8 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            if (System.getenv("TSF_KEYSTORE_FILE") != null) {
+            def ksFile = System.getenv("TSF_KEYSTORE_FILE")
+            if (ksFile != null && !ksFile.trim().isEmpty()) {
                 signingConfig = signingConfigs.tsfRelease
             }
         }
