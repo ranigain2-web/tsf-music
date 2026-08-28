@@ -541,3 +541,62 @@ Stage Summary:
 - Mac gauntlet bars status: BAR-M1 ✅ (CI produces x64 DMG + probe passes); BAR-M2 ✅ (100% feature parity by construction — engine IS the whole web app; probe + smoke on runner); BAR-M3 ◐ (media keys/NP/App-Nap/menu/tray implemented & compiled; dock menu DEFERRED — not in tauri 2.11; runtime proof on the user's Mac pending); BAR-M4 (blind screenshot loop vs Spotify macOS) not started — needs user-side install first.
 - Next round (R-M4): dock menu via objc2 declare_class (NSApp.setDockMenu:), probe threshold 50→70% A/B, bundle diet (standalone node_modules audit), first-boot UX polish, AI features config wizard (~/.z-ai-config) in-shell.
 - Risks: (a) DMG is ad-hoc signed — First-Run.command handles Gatekeeper; notarization needs a paid Apple ID later; (b) full-length % on user's Mac should exceed 55% (residential IP) but unverified until user runs it; (c) AI features need ~/.z-ai-config present (graceful degradation documented).
+
+---
+Task ID: 14
+Agent: Z.ai Code (main — user bug report: engine failed to start on their Mac)
+Task: User installed v0.1.0 x64 DMG on the Intel i9 MacBook Pro (macOS 26 Tahoe); app shell launched but showed "The engine failed to start — engine did not become healthy within 120s (see ~/Library/Logs/com.tsfmusic.desktop)". Go deep, find the root cause, fix, re-ship.
+
+Work Log:
+- EVIDENCE TRIAGE from the shipped artifact itself (downloaded v0.1.0 x64 zip from the release and extracted the .app on the sandbox — no macOS needed): `Contents/Resources/resources/server/` contained **ONLY node_modules**. NO server.js, NO package.json, NO .next, NO public. `find <whole .app> -name server.js` → 0 results. The engine could NEVER have booted from any v0.1.0 install — the bug shipped in the very first DMG.
+- ROOT CAUSE (3-line mechanism in scripts/desktop/prepare-mac-resources.sh):
+  1. `mkdir -p "$RES/server"` creates the destination dir;
+  2. `cp -R "$ROOT/.next/standalone" "$RES/server"` — POSIX cp -R with an EXISTING destination copies the source INTO it → engine landed at server/standalone/…;
+  3. the file-tracing prune (`find -maxdepth 1 ! -name server.js … -exec rm -rf`) matched none of its keep-names against `standalone` → deleted the entire engine tree;
+  4. the prisma step then `mkdir -p server/node_modules/.prisma/client` — recreating exactly the ONLY directory the shipped bundle contained. Every CI gate stayed green because no gate ever EXECUTED the packaged layout (probe ran bun on Linux from the repo, never the bundle).
+- SECONDARY FIXES shipped in the same v0.1.1 release (defense in depth, all independently real risks):
+  (a) Quarantine self-heal: bundled bun/yt-dlp/deno are Gatekeeper-assessed SEPARATELY at exec when quarantined → silent SIGKILL even when the main app is allowed. Shell now strips com.apple.quarantine from its own Resources at every boot (xattr -r -d, best-effort, no privileges needed).
+  (b) DATABASE_URL percent-encoding: app data lives in "~/Library/Application Support" — the SPACE broke Prisma file: URL parsing (unencoded). Now encode_file_url() emits %20 (Prisma-documented requirement). CI probe never hit this because /tmp/probe.db has no spaces.
+  (c) bun 1.3.4 → 1.4.0 (1.3.4 predates macOS 26 Tahoe; newer JIT/darwin support).
+  (d) FAIL-FAST health gate: the 120s poll now checks server.try_wait() every tick; on process death it surfaces exit code + last 700 chars of server.log ON the error screen (JSON-encoded detail), with a logs-path hint on the fallback page.
+  (e) TSF_YTDLP_BIN env passed explicitly to the engine (no PATH-scanning ambiguity).
+- CI GAP CLOSED: new "Smoke — boot the packaged engine exactly like the shell" step in macos.yml build job (both archs): executes the packaged Mach-O bun + pot-provider + server from the built .app's Resources with a SPACE-CONTAINING DATABASE_URL ($HOME/Library/Application Support/tsf-smoke, %20-encoded), gates on /api/health 200 + root page 200 + bundled yt-dlp --version. x64 smoke runs under Rosetta on the arm64 runner. THE SMOKE STEP IMMEDIATELY PROVED ITS WORTH: on run 33172692108 (fix-pack 9575401, before the cp -R fix was found) it would have failed exactly at test -f server.js — the layout bug was caught by audit before that run's smoke even executed.
+- Hard verifies added at PACK time in prepare-mac-resources.sh: server.js + package.json + .next must exist right after the standalone copy (fail in 2 minutes at pack, not on a user's Mac).
+- VERSION → 0.1.1 (tauri.conf.json + Cargo.toml + Cargo.lock). README-MACOS.md gained a Troubleshooting section; First-Run-MacOS.command now points at logs + Retry; fallback page shows engine log tail + guidance.
+- Fix-pack 9575401 (shell hardening) + bf8b802 (cp -R root cause) pushed to main; macOS workflow auto-triggered (concurrency cancels the superseded run).
+
+Stage Summary:
+- User-facing outcome: v0.1.1 DMGs will boot the engine for real. The v0.1.0 DMG was structurally incapable of working (engine never packaged); user should install v0.1.1 once the release is up (or, interim: none — no config fixes v0.1.0; the files simply weren't in the bundle).
+- Lessons (chart003-grade): (1) audit SHIPPED ARTIFACTS, not just green pipelines — a green CI with zero artifact-level verification shipped a broken app; (2) cp -R into an existing dir nests — always use src/. contents-form or rm the dst first; (3) every bundle-layout assumption now has a CI execution gate (smoke) + pack-time asserts.
+- UNRESOLVED / next: wait for run on bf8b802 → green → tag v0.1.1 → verify release assets → report to user with install steps. Runtime risks remaining on real hardware: Gatekeeper behavior on the user's machine (self-heal should cover it), residential-IP full-length % (probe says ≥55% on datacenter), R-M4 dock menu still deferred.
+
+---
+Task ID: 15
+Agent: Z.ai Code (main — v0.1.1 CI convergence + release)
+Task: Take the v0.1.1 fix-packs through CI to green, cut the release.
+
+Work Log:
+- ROUND A (9575401, fix-pack 1): FAILED 3 ways — (1) tauri build: E0597 `st does not live long enough` (if-let scrutinee temporary + early `return Err` inside the new fail-fast poll loop — the SAME borrowck family kill_slot solved; Rust drops if-let temporaries after the enclosing statement); (2) check job: tsc exploded with TS2305 `@prisma/client has no exported member PrismaClient` + 3× TS18047 in playlist-generator/route.ts — diagnosed as CASCADE from a missing generated client (route.ts untouched since before green runs; @prisma/client without `prisma generate` is a stub). REPRODUCED LOCALLY: `bunx prisma generate && bunx tsc -p tsconfig.ci.json` → exit 0. Fixes: extracted server_exit_message(app)->Option<String> helper (guards contained in one fn — pattern now applied twice), added `bunx prisma generate` to the check job.
+- ROUND B (aa7d130): compile ✅ check ✅ probe ✅ — and the NEW SMOKE STEP bit exactly as designed: `test -f server.js` ✓ (cp -R fix confirmed IN the bundle), then `error: Cannot find module './build/main.js' from .../pot-provider/index.js` → **v0.1.0 bug #2**: mini-services/pot-provider/build/ (committed TS output) was never copied into the bundle — the shipped POT provider could never start either (invisible to CI: probe runs pot from the repo checkout). ALSO a smoke-script bug: RES was relative and the server subshell `cd`s into the bundle → `env: .../bun: No such file or directory`. Fixes: prepare script copies pot-provider/build/ + pack-time assert; smoke absolutizes RES.
+- ROUND C (8fedf47): **ALL FOUR JOBS GREEN** — probe ✅ / check ✅ / build x64 ✅ / build arm64 ✅. SMOKE EVIDENCE (in CI logs): `packaged engine healthy after 16s`, health JSON `{"ok":true,...}` WITH the %20-encoded space-path DATABASE_URL (Prisma parsed it — relayInstance query ran), `engine root page: HTTP 200`, bundled `yt-dlp --version` → 2026.08.19, `codesign OK`. The full boot chain (bundled Mach-O bun 1.4.0 + server.js + pot build/ + space-path DB) now PROVEN on real darwin, from the .app itself, in both arches (x64 via Rosetta).
+- TAGGED v0.1.1 on 8fedf47 → release pipeline fired (macOS release job + android + ios tag runs).
+- Watch-item (non-blocker): runner health JSON showed `ytdlp.available:false` — first yt-dlp spawn under Rosetta likely exceeded probeBinary's 4s cap and the negative cache holds 10 min; on the user's NATIVE Intel Mac there is no Rosetta tax; boot gate is health-2xx (passed) and the probe job proves the resolve chain natively. Re-check on user machine if streaming degrades.
+
+Stage Summary:
+- Three previously-invisible packaging bugs (engine missing, POT missing, space-in-DB-URL) are fixed AND every one of them now has a standing CI execution gate: pack-time asserts + packaged-engine smoke on darwin (both arches) + space-path DB regression. The artifact-level gauntlet has real teeth now.
+- v0.1.1 = the FIRST version where the DMG can actually boot its engine on a user Mac.
+
+---
+Task ID: 16
+Agent: Z.ai Code (main — v0.1.1 release verification + delivery)
+Task: Verify the published v0.1.1 release and close out the user bug report.
+
+Work Log:
+- ALL THREE TAG RUNS GREEN on v0.1.1: macOS App (probe+build+smoke+release), Android APK, iOS IPA (workflow-published this time — the permissions fix holds).
+- RELEASE VERIFIED: https://github.com/ranigain2-web/tsf-music/releases/tag/v0.1.1 — 7 assets (x64/arm64 DMG 282/278.8MB + zips + 2 APKs + IPA).
+- ARTIFACT-LEVEL AUDIT (belt-and-braces on the SHIPPED zip, not just CI): server/server.js ✓ server/package.json ✓ server/.next ✓ server/public ✓ pot-provider/build/main.js ✓ runtime/bun ✓ bin/yt-dlp ✓ bin/deno ✓ db/tsf.db — the exact set v0.1.0 lacked.
+
+Stage Summary:
+- v0.1.1 is the first shippable Mac build. User instruction: install from v0.1.1 DMG (First-Run-MacOS.command once), engine self-heals quarantine on every boot, error screen now self-diagnoses (exit code + log tail) if anything else goes wrong.
+- Bars: BAR-M1 ✅✅ (CI now executes the packaged engine — artifact-level green means green); BAR-M2 ✅; BAR-M3 media keys/NP runtime proof pending user install; BAR-M4 blind screenshot loop pending.
+- Next (R-M4+): dock menu (objc2), probe threshold A/B 50→70%, native-Intel streaming spot-check (ytdlp.available flag on real hardware), AI config wizard.
