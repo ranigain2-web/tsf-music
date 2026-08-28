@@ -122,7 +122,9 @@ jobs:
 
       - name: Verify .app output
         run: |
-          APP=$(find ios/build/DerivedData/Build/Products -maxdepth 3 -name "*.app" | head -1)
+          # SYMROOT (given with -target, no scheme) resolves relative to the
+          # PROJECT dir (ios/App), not the shell CWD — search both roots.
+          APP=$(find ios/build ios/App/build -maxdepth 6 -name "*.app" 2>/dev/null | head -1)
           test -n "$APP" || { echo "No .app produced"; exit 1; }
           echo "Built: $APP"
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist"
