@@ -19,6 +19,9 @@ import { Play, Shuffle, MoreHorizontal, Clock3, Sparkles, RefreshCw } from 'luci
 import { usePlayer, type PlayerTrack } from '@/store/player'
 import { api } from '@/store/nav'
 import { TrackRow } from '@/components/shared'
+// MINDBEAT: mark tracks exposed by this AI surface + REC_EXPOSURE impressions
+import { markQueueSource, recExposure } from '@/lib/mindbeat/client'
+import type { SourceSurface } from '@/lib/mindbeat/types'
 
 interface AiGeneratedData {
   id: string
@@ -28,6 +31,14 @@ interface AiGeneratedData {
   emoji?: string
   gradient?: [string, string]
   tracks: PlayerTrack[]
+}
+
+/** Map the AI surface's endpoint to a constitution SourceSurface. */
+function surfaceForEndpoint(ep: string): SourceSurface {
+  if (ep.includes('discover-weekly') || ep.includes('release-radar')) return 'discovery'
+  if (ep.includes('daylist')) return 'daylist'
+  if (ep.includes('on-repeat')) return 'daily_mix'
+  return 'ai_playlist'
 }
 
 interface Props {
@@ -71,6 +82,21 @@ export function AiGeneratedView({ endpoint, title, subtitle, gradient, emoji }: 
     })()
     return () => { cancelled = true }
   }, [endpoint])
+
+  // MINDBEAT: whenever this AI surface's tracks are shown, stamp them so
+  // plays attribute to the right rec surface, and log REC_EXPOSURE
+  // impressions with the pool rank.
+  useEffect(() => {
+    const tracks = data?.tracks
+    if (!tracks || !tracks.length) return
+    try {
+      const surface = surfaceForEndpoint(endpoint)
+      markQueueSource(tracks, surface)
+      tracks.forEach((t, i) => {
+        if (t?.videoId) recExposure(t.videoId, surface, i)
+      })
+    } catch { /* instrumentation only */ }
+  }, [data, endpoint])
 
   if (loading && !data) {
     return (

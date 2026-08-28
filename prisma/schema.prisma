@@ -184,3 +184,58 @@ model AiSeedTrack {
   aiPlaylist AiPlaylist @relation(fields: [aiPlaylistId], references: [id], onDelete: Cascade)
   track      Track      @relation(fields: [trackId], references: [id], onDelete: Cascade)
 }
+
+// ---- MINDBEAT v2.0 — L1 Event Ledger (append-only, 90d retention) ----
+
+model LedgerEvent {
+  id        String   @id // ULID
+  ts        DateTime
+  type      String   // EventType (SESSION_START | TRACK_START | TRACK_HEARTBEAT | TRACK_SKIP | ...)
+  sessionId String
+  trackId   String?
+  surface   String?  // SourceSurface enum value
+  payload   String   // JSON — event-specific fields
+
+  @@index([ts])
+  @@index([sessionId])
+  @@index([type])
+}
+
+model ListenSession {
+  id            String    @id
+  startTs       DateTime
+  endTs         DateTime?
+  daypart       String    // morning | afternoon | evening | night | lateNight
+  dayKind       String    // weekday | weekend
+  trackCount    Int       @default(0)
+  totalListenMs Int       @default(0)
+}
+
+// ---- MINDBEAT v2.0 — L2 Taste Profile (rebuildable cache over the ledger) ----
+
+// Single-row JSON cache; the ledger is the source of truth, this is the
+// compiled profile the Decision Engine reads. Rebuildable <3s.
+model TasteProfileRow {
+  id        String   @id @default("main")
+  data      String
+  updatedAt DateTime @updatedAt
+}
+
+// ---- MINDBEAT v2.0 — Proxy Feature Space ("Sonic Signal Synthesis") ----
+// LLM cultural priors (cached forever) + behavioral calibration deltas.
+
+model TrackFeature {
+  trackId     String  @id
+  energy      Float?
+  valence     Float?
+  tempoClass  String? // slow | mid | fast
+  acoustic    String? // acoustic | amplified | electronic
+  eraBucket   String? // pre-80s | 80s | 90s | 2000s | 2010s | current
+  language    String?
+  moodTags    String? // JSON array
+  confidence  String? // HIGH | MEDIUM | LOW
+  effEnergy   Float?  // behaviorally calibrated effective energy
+  effValence  Float?
+  calibrations Int    @default(0)
+  updatedAt   DateTime @updatedAt
+}

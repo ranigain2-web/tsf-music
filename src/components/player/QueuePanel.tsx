@@ -19,7 +19,7 @@
  */
 
 import { useRef, useState } from 'react'
-import { X, GripVertical, Trash2, Music4 } from 'lucide-react'
+import { X, GripVertical, Trash2, Music4, Sparkles } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { usePlayer, type PlayerTrack } from '@/store/player'
 import {
@@ -141,7 +141,14 @@ function SortableRow({
           className="w-10 h-10 rounded object-cover shrink-0 pointer-events-none"
         />
         <div className="min-w-0 flex-1">
-          <div className="text-sm truncate text-white">{track.title}</div>
+          <div className="text-sm truncate text-white flex items-center gap-1.5">
+            <span className="truncate">{track.title}</span>
+            {track.__rec && (
+              <span title={track.__reason || 'Smart shuffle pick'} className="shrink-0 inline-flex">
+                <Sparkles size={12} className="text-[#1ed760]" aria-label="Smart shuffle pick" />
+              </span>
+            )}
+          </div>
           <div className="text-xs text-white/60 truncate">{track.artistName}</div>
         </div>
         <button
@@ -221,7 +228,14 @@ export function QueuePanel() {
                 className="w-10 h-10 rounded object-cover shrink-0"
               />
               <div className="min-w-0 flex-1">
-                <div className="text-sm text-white truncate font-medium">{current.title}</div>
+                <div className="text-sm text-white truncate font-medium flex items-center gap-1.5">
+                  <span className="truncate">{current.title}</span>
+                  {current.__rec && (
+                    <span title={current.__reason || 'Smart shuffle pick'} className="shrink-0 inline-flex">
+                      <Sparkles size={12} className="text-[#1ed760]" aria-label="Smart shuffle pick" />
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-white/60 truncate">{current.artistName}</div>
               </div>
               <span className="shrink-0 flex items-end gap-[2px] h-3.5 pr-1" aria-label="Now playing">

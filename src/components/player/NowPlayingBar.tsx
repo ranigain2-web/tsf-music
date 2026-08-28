@@ -176,7 +176,7 @@ export function NowPlayingBar() {
             )}
           </button>
           <button
-            onClick={next}
+            onClick={() => next()}
             className="shrink-0 w-10 h-10 flex items-center justify-center text-white active:scale-90 transition-transform -ml-1"
             aria-label="Next track"
           >
@@ -251,7 +251,7 @@ export function NowPlayingBar() {
           >
             <Shuffle size={16} fill={shuffle ? 'currentColor' : 'none'} />
           </button>
-          <button onClick={prev} className="text-[#b3b3b3] hover:text-white transition-colors" aria-label="Previous track" title="Previous">
+          <button onClick={() => prev()} className="text-[#b3b3b3] hover:text-white transition-colors" aria-label="Previous track" title="Previous">
             <SkipBack size={16} fill="currentColor" />
           </button>
           <button
@@ -267,7 +267,7 @@ export function NowPlayingBar() {
               <Play size={16} fill="currentColor" className="translate-x-[1px]" />
             )}
           </button>
-          <button onClick={next} className="text-[#b3b3b3] hover:text-white transition-colors" aria-label="Next track" title="Next">
+          <button onClick={() => next()} className="text-[#b3b3b3] hover:text-white transition-colors" aria-label="Next track" title="Next">
             <SkipForward size={16} fill="currentColor" />
           </button>
           <button

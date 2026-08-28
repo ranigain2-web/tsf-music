@@ -2,16 +2,23 @@
 
 /**
  * TSF Music — Search view
- * Live search with tabs (All / Songs / Albums / Artists), recent searches,
- * browse genre cards when empty, AI Playlist Generator entry.
+ * Live search with Keyword|Vibe modes + tabs (All / Songs / Albums / Artists),
+ * recent searches, browse genre cards when empty, AI Playlist Generator entry.
+ *
+ * Vibe mode (MINDBEAT v2): the query is parsed by the shared intent brain
+ * (/api/ai/vibe-search) and matched as a mood/activity/era — results render
+ * in the same track list, with a one-tap "Playlist this vibe" shortcut into
+ * the AI generator (pre-filled with the query).
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, Play, Wand2, Sparkles, Clock3, X } from 'lucide-react'
+import { Search, Play, Wand2, Sparkles, Clock3, X, AudioLines } from 'lucide-react'
 import { usePlayer, type PlayerTrack } from '@/store/player'
 import { api, useNav } from '@/store/nav'
 import { TrackRow, AlbumCard, ArtistCard } from '@/components/shared'
 import { AiPlaylistGenerator } from '@/components/ai/AiPlaylistGenerator'
+// MINDBEAT: SEARCH_QUERY on settled results, SEARCH_CLICK on result rows
+import { searchClick, searchQuery } from '@/lib/mindbeat/client'
 import type { YtmTrack, YtmAlbum, YtmArtist } from '@/lib/ytm/parse'
 
 const GENRES = [
@@ -112,14 +119,25 @@ function persistRecent(next: string[]) {
   return next
 }
 
+interface VibeResponse {
+  tracks: YtmTrack[]
+  vibePlaylistShortcut: { prompt: string }
+  artistsLike: { id?: string; name: string }[]
+  intentConfidence?: number
+  offline?: boolean
+}
+
 export function SearchView({ initialQuery }: { initialQuery?: string }) {
   const [query, setQuery] = useState(initialQuery ?? '')
   const [debounced, setDebounced] = useState(initialQuery ?? '')
+  const [mode, setMode] = useState<'keyword' | 'vibe'>('keyword')
   const [tab, setTab] = useState<'all' | 'songs' | 'albums' | 'artists'>('all')
   const [results, setResults] = useState<{ tracks: YtmTrack[]; albums: YtmAlbum[]; artists: YtmArtist[]; offline: boolean } | null>(null)
+  const [vibe, setVibe] = useState<VibeResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [recent, setRecent] = useState<string[]>([])
   const [aiOpen, setAiOpen] = useState(false)
+  const [aiPrefill, setAiPrefill] = useState<string | undefined>(undefined)
   const inputRef = useRef<HTMLInputElement>(null)
   const playQueue = usePlayer((s) => s.playQueue)
 
@@ -143,14 +161,45 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
     return () => clearTimeout(t)
   }, [query])
 
-  // search when debounced changes
+  // search when debounced changes (keyword mode → ytm, vibe mode → intent brain)
   useEffect(() => {
     if (!debounced) {
       setResults(null)
+      setVibe(null)
       return
     }
     let cancelled = false
     setLoading(true)
+
+    const rememberRecent = () => {
+      try {
+        const prev = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]').filter((x: string) => x !== debounced)
+        setRecent(persistRecent([debounced, ...prev].slice(0, 10)))
+      } catch {}
+    }
+
+    if (mode === 'vibe') {
+      setResults(null)
+      void api<VibeResponse>('/api/ai/vibe-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: debounced }),
+      })
+        .then((r) => {
+          if (cancelled) return
+          setVibe(r)
+          // MINDBEAT: vibe searches count as SEARCH_QUERY too
+          searchQuery(debounced, r.tracks?.length || 0)
+          rememberRecent()
+        })
+        .catch(() => !cancelled && setVibe({ tracks: [], vibePlaylistShortcut: { prompt: debounced }, artistsLike: [], offline: true }))
+        .finally(() => !cancelled && setLoading(false))
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setVibe(null)
     const filter = tab === 'songs' ? 'songs' : undefined
     void api<{ tracks: YtmTrack[]; albums: YtmAlbum[]; artists: YtmArtist[]; offline: boolean }>(
       `/api/ytm/search?q=${encodeURIComponent(debounced)}${filter ? `&filter=${filter}` : ''}`
@@ -158,22 +207,26 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
       .then((r) => {
         if (cancelled) return
         setResults(r)
-        // save recent
-        try {
-          const prev = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]').filter((x: string) => x !== debounced)
-          setRecent(persistRecent([debounced, ...prev].slice(0, 10)))
-        } catch {}
+        // MINDBEAT: SEARCH_QUERY on the settled query (deduped per identical
+        // query within 1.5s inside the client module)
+        searchQuery(debounced, r.tracks?.length || 0)
+        rememberRecent()
       })
       .catch(() => !cancelled && setResults({ tracks: [], albums: [], artists: [], offline: true }))
       .finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true
     }
-  }, [debounced, tab])
+  }, [debounced, tab, mode])
 
   const tracksAsPlayer = useMemo(
     () => (results?.tracks || []).map((t) => ({ ...t })) as PlayerTrack[],
     [results]
+  )
+
+  const vibeTracksAsPlayer = useMemo(
+    () => (vibe?.tracks || []).map((t) => ({ ...t })) as PlayerTrack[],
+    [vibe]
   )
 
   return (
@@ -267,24 +320,107 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
 
       {debounced && (
         <>
-          {/* filter tabs */}
-          <div className="flex items-center gap-2 px-4 lg:px-6 mb-4 mt-2">
-            {(['all', 'songs', 'albums', 'artists'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`px-4 h-8 rounded-full text-sm font-medium capitalize transition-colors ${
-                  tab === t ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/20'
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-            {loading && <span className="text-[13px] text-[#a7a7a7] ml-1">Searching…</span>}
+          {/* mode toggle (Keyword | Vibe) + filter tabs — same chip styling */}
+          <div className="flex items-center gap-2 px-4 lg:px-6 mb-4 mt-2 flex-wrap">
+            <button
+              onClick={() => setMode('keyword')}
+              className={`px-4 h-8 rounded-full text-sm font-medium transition-colors ${
+                mode === 'keyword' ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/20'
+              }`}
+            >
+              Keyword
+            </button>
+            <button
+              onClick={() => setMode('vibe')}
+              className={`flex items-center gap-1.5 px-4 h-8 rounded-full text-sm font-medium transition-colors ${
+                mode === 'vibe' ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/20'
+              }`}
+              title="Describe a feeling — the intent brain does the searching"
+            >
+              <AudioLines size={13} className={mode === 'vibe' ? 'text-black' : 'text-[#1ed760]'} />
+              Vibe
+            </button>
+            {mode === 'keyword' &&
+              (['all', 'songs', 'albums', 'artists'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={`px-4 h-8 rounded-full text-sm font-medium capitalize transition-colors ${
+                    tab === t ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            {loading && (
+              <span className="text-[13px] text-[#a7a7a7] ml-1">
+                {mode === 'vibe' ? 'Reading the vibe…' : 'Searching…'}
+              </span>
+            )}
           </div>
 
+          {/* VIBE results — same track list + one-tap playlist shortcut */}
+          {mode === 'vibe' && (
+            <div className="px-4 lg:px-6">
+              <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                <div className="flex items-center gap-4">
+                  {vibeTracksAsPlayer.length > 0 && (
+                    <button
+                      onClick={() => playQueue(vibeTracksAsPlayer, 0, `Vibe: ${debounced}`)}
+                      className="flex items-center gap-2 text-sm text-[#1ed760] hover:scale-105 transition-transform font-bold"
+                    >
+                      <Play size={20} fill="currentColor" /> Play all
+                    </button>
+                  )}
+                  {vibe && vibe.artistsLike.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] uppercase tracking-wide text-[#7a7a7a] font-bold">Artists like</span>
+                      {vibe.artistsLike.map((a) => (
+                        <button
+                          key={a.name}
+                          onClick={() => {
+                            setQuery(`${a.name} songs`)
+                            setMode('keyword')
+                          }}
+                          className="px-3 h-7 rounded-full bg-white/[0.08] hover:bg-white/[0.16] text-xs text-white transition-colors active:scale-95"
+                        >
+                          {a.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {vibe && vibe.tracks.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setAiPrefill(vibe.vibePlaylistShortcut?.prompt || debounced)
+                      setAiOpen(true)
+                    }}
+                    className="flex items-center gap-1.5 rounded-full bg-[#1ed760] text-black px-4 h-8 text-xs font-bold hover:scale-[1.04] active:scale-95 transition-transform"
+                  >
+                    <Wand2 size={13} />
+                    Playlist this vibe
+                  </button>
+                )}
+              </div>
+              {vibeTracksAsPlayer.map((t, i) => (
+                <TrackRow
+                  key={t.videoId}
+                  track={t}
+                  index={i}
+                  onPlay={() => {
+                    // MINDBEAT: SEARCH_CLICK — rank = position in the rendered list
+                    searchClick(t.videoId, i)
+                    playQueue(vibeTracksAsPlayer, i, `Vibe: ${debounced}`)
+                  }}
+                />
+              ))}
+              {vibe && !vibe.tracks.length && !loading && <EmptyState query={debounced} />}
+            </div>
+          )}
+
           {/* top result + songs (All tab) */}
-          {tab === 'all' && results && (
+          {mode === 'keyword' && tab === 'all' && results && (
             <div className="px-0 lg:px-0">
               {results.artists.length > 0 && (
                 <div className="grid lg:grid-cols-[minmax(280px,1fr)_2fr] gap-6 px-4 lg:px-6 mb-6">
@@ -311,7 +447,11 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
                           index={i}
                           showIndex={false}
                           showAlbum={false}
-                          onPlay={() => playQueue(tracksAsPlayer, i, `Search: ${debounced}`)}
+                          onPlay={() => {
+                            // MINDBEAT: SEARCH_CLICK — rank = position in the rendered list
+                            searchClick(t.videoId, i)
+                            playQueue(tracksAsPlayer, i, `Search: ${debounced}`)
+                          }}
                         />
                       ))}
                     </div>
@@ -337,7 +477,7 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
           )}
 
           {/* songs tab */}
-          {tab === 'songs' && (
+          {mode === 'keyword' && tab === 'songs' && (
             <div className="px-4 lg:px-6">
               {tracksAsPlayer.length > 0 ? (
                 <>
@@ -352,7 +492,11 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
                       key={t.videoId}
                       track={t}
                       index={i}
-                      onPlay={() => playQueue(tracksAsPlayer, i, `Search: ${debounced}`)}
+                      onPlay={() => {
+                        // MINDBEAT: SEARCH_CLICK — rank = position in the rendered list
+                        searchClick(t.videoId, i)
+                        playQueue(tracksAsPlayer, i, `Search: ${debounced}`)
+                      }}
                     />
                   ))}
                 </>
@@ -363,7 +507,7 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
           )}
 
           {/* albums tab */}
-          {tab === 'albums' && (
+          {mode === 'keyword' && tab === 'albums' && (
             <Section title="Albums">
               {results?.albums.map((a) => (
                 <AlbumCard key={a.browseId} id={a.browseId} name={a.name} artist={a.artistName} thumbnail={a.thumbnail} year={a.year} />
@@ -373,7 +517,7 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
           )}
 
           {/* artists tab */}
-          {tab === 'artists' && (
+          {mode === 'keyword' && tab === 'artists' && (
             <Section title="Artists">
               {results?.artists.map((a) => (
                 <ArtistCard key={a.browseId} id={a.browseId} name={a.name} thumbnail={a.thumbnail} subscribers={a.subscribers} />
@@ -384,7 +528,7 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
         </>
       )}
 
-      <AiPlaylistGenerator open={aiOpen} onOpenChange={setAiOpen} />
+      <AiPlaylistGenerator open={aiOpen} onOpenChange={setAiOpen} initialPrompt={aiPrefill} />
     </div>
   )
 }

@@ -1,23 +1,30 @@
 'use client'
 
 /**
- * TSF Music — AI Playlist Generator (streaming edition)
+ * TSF Music — AI Playlist Generator (five-stage pipeline client)
  *
  * Consumes the SSE stream from /api/ai/playlist-generator and renders tracks
- * the moment they resolve — no dead spinner. Waiting feels fast because it
- * IS fast (Bar 1) and because the copy is humanized (what Spotify's own AI
- * Playlist does while it works).
+ * the moment they resolve — no dead spinner. The v2 pipeline reports its
+ * stages (understand → hunt → curate → polish → narrate) and each is mapped
+ * to a human line; per-track `reason` lines render under every row (the
+ * S3 curator explains each pick in ≤8 words).
+ *
+ * `polish` is special: the deterministic polisher may re-order / correct the
+ * sequence, so the server re-emits the corrected order right after that
+ * phase — the client clears what it has and re-renders.
  *
  * Purity (Bar 2): the only branding in this surface is "TSF AI".
  */
 
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Sparkles, Loader2, Wand2, Music2, CheckCircle2 } from 'lucide-react'
+import { Sparkles, Loader2, Wand2, Music2, CheckCircle2, Shuffle } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useNav, api } from '@/store/nav'
 import { useLibrary } from '@/store/library'
+// MINDBEAT: AI_REGENERATE gets its long-missing hook (see worklog 13-b)
+import { aiRegenerate } from '@/lib/mindbeat/client'
 
 interface Track {
   videoId: string
@@ -46,7 +53,21 @@ const SUGGESTIONS = [
   'road trip across the desert',
 ]
 
-const CURATING_HINTS = [
+/** v2 pipeline phases → human lines (v1 phase names kept as fallbacks). */
+const PHASE_LABELS: Record<string, string> = {
+  understand: 'Reading your taste…',
+  hunt: 'Hunting real tracks…',
+  curate: 'Curating the arc…',
+  polish: 'Polishing the flow…',
+  narrate: 'Naming it…',
+  // v1 fallbacks (older cached streams, etc.)
+  understanding: 'Reading your taste…',
+  curating: 'Curating the arc…',
+  filling: 'Hunting real tracks…',
+  replayed: 'Back by demand — replaying…',
+}
+
+const FALLBACK_HINTS = [
   'Reading your vibe…',
   'Digging through the crates…',
   'Lining up the perfect openers…',
@@ -60,12 +81,22 @@ function fmtMs(ms?: number): string {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
+/** djb2 — tiny stable prompt hash for the AI_REGENERATE ledger event. */
+function promptHash(p: string): string {
+  let h = 5381
+  for (let i = 0; i < p.length; i++) h = ((h << 5) + h + p.charCodeAt(i)) | 0
+  return (h >>> 0).toString(36)
+}
+
 export function AiPlaylistGenerator({
   open,
   onOpenChange,
+  initialPrompt,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
+  /** Seed the prompt when opened pre-filled (e.g. Vibe Search → "Playlist this vibe"). */
+  initialPrompt?: string
 }) {
   const [prompt, setPrompt] = useState('')
   const [loading, setLoading] = useState(false)
@@ -73,19 +104,26 @@ export function AiPlaylistGenerator({
   const [tracks, setTracks] = useState<Track[]>([])
   const [meta, setMeta] = useState<{ title: string; description: string } | null>(null)
   const [done, setDone] = useState<DoneEvent | null>(null)
+  const [phaseLabel, setPhaseLabel] = useState<string | null>(null)
   const [hintIdx, setHintIdx] = useState(0)
   const [wantCount, setWantCount] = useState(25)
+  const [regenCount, setRegenCount] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const push = useNav((s) => s.push)
   const refreshLibrary = useLibrary((s) => s.refresh)
 
-  // rotate the humanized status copy while curating
+  // pre-fill support (Vibe Search hands its query over)
   useEffect(() => {
-    if (!loading || done) return
-    const t = setInterval(() => setHintIdx((i) => (i + 1) % CURATING_HINTS.length), 2200)
+    if (open && initialPrompt) setPrompt(initialPrompt)
+  }, [open, initialPrompt])
+
+  // rotate the humanized status copy only while no stage label is streaming
+  useEffect(() => {
+    if (!loading || done || phaseLabel) return
+    const t = setInterval(() => setHintIdx((i) => (i + 1) % FALLBACK_HINTS.length), 2200)
     return () => clearInterval(t)
-  }, [loading, done])
+  }, [loading, done, phaseLabel])
 
   // keep the growing list pinned to the newest entries
   useEffect(() => {
@@ -93,21 +131,23 @@ export function AiPlaylistGenerator({
     if (el && loading) el.scrollTop = el.scrollHeight
   }, [tracks.length, loading])
 
-  const generate = async (p: string) => {
+  const generate = async (p: string, isRegen = false) => {
     if (!p.trim()) return
     setLoading(true)
     setError(null)
     setTracks([])
     setMeta(null)
     setDone(null)
+    setPhaseLabel(null)
     setHintIdx(0)
+    if (isRegen) setRegenCount((n) => n + 1)
     const ctrl = new AbortController()
     abortRef.current = ctrl
     try {
       const res = await fetch('/api/ai/playlist-generator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: p.trim(), count: wantCount }),
+        body: JSON.stringify({ prompt: p.trim(), count: wantCount, ...(isRegen ? { regenerate: true } : {}) }),
         signal: ctrl.signal,
       })
       if (!res.ok || !res.body) {
@@ -131,6 +171,11 @@ export function AiPlaylistGenerator({
           try { ev = JSON.parse(line.slice(5).trim()) } catch { continue }
           if (ev.type === 'meta') {
             setMeta({ title: ev.title || '', description: ev.description || '' })
+          } else if (ev.type === 'phase') {
+            // `polish` means the deterministic polisher corrected the order —
+            // the corrected sequence is re-emitted right after this event.
+            if (ev.phase === 'polish') setTracks([])
+            setPhaseLabel(PHASE_LABELS[ev.phase] ?? null)
           } else if (ev.type === 'track' && ev.track) {
             setTracks((prev) => [...prev, { ...ev.track, reason: ev.reason }])
           } else if (ev.type === 'error') {
@@ -158,7 +203,9 @@ export function AiPlaylistGenerator({
     setTracks([])
     setMeta(null)
     setDone(null)
+    setPhaseLabel(null)
     setLoading(false)
+    setRegenCount(0)
     onOpenChange(false)
   }
 
@@ -309,19 +356,19 @@ export function AiPlaylistGenerator({
                 </div>
               </div>
 
-              {/* live status line */}
+              {/* live status line — pipeline stage label, rotating hints as fallback */}
               {curating && (
                 <div className="flex items-center gap-2 text-xs text-[#a7a7a7] px-1">
                   <Loader2 size={12} className="animate-spin text-[#1ed760]" />
                   <AnimatePresence mode="wait">
                     <motion.span
-                      key={hintIdx}
+                      key={phaseLabel ?? `hint-${hintIdx}`}
                       initial={{ opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -4 }}
                       transition={{ duration: 0.18 }}
                     >
-                      {CURATING_HINTS[hintIdx]}
+                      {phaseLabel ?? FALLBACK_HINTS[hintIdx]}
                     </motion.span>
                   </AnimatePresence>
                 </div>
@@ -372,19 +419,39 @@ export function AiPlaylistGenerator({
               <div className="flex items-center justify-between pt-1">
                 {done ? (
                   <>
-                    <Button
-                      variant="ghost"
-                      onClick={() => { setTracks([]); setMeta(null); setDone(null) }}
-                      className="text-white hover:bg-white/10"
-                    >
-                      Make another
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        onClick={() => { setTracks([]); setMeta(null); setDone(null); setPhaseLabel(null) }}
+                        className="text-white hover:bg-white/10"
+                      >
+                        Make another
+                      </Button>
+                      {prompt.trim() && (
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            // MINDBEAT: AI_REGENERATE — the event 13-b shipped
+                            // without a hook finally gets one
+                            aiRegenerate(promptHash(prompt.trim()), regenCount + 1)
+                            void generate(prompt, true)
+                          }}
+                          className="text-[#a7a7a7] hover:text-white hover:bg-white/10"
+                          title="A different take on the same vibe — at least 40% new tracks"
+                        >
+                          <Shuffle size={13} className="mr-1.5" />
+                          Remix this
+                        </Button>
+                      )}
+                    </div>
                     <Button
                       onClick={() => {
+                        if (!done.playlistId) return
                         close()
                         push({ type: 'playlist', id: done.playlistId })
                       }}
-                      className="rounded-full bg-white text-black hover:scale-[1.04] active:scale-95 font-bold px-6 transition-all duration-150"
+                      disabled={!done.playlistId}
+                      className="rounded-full bg-white text-black hover:scale-[1.04] active:scale-95 font-bold px-6 transition-all duration-150 disabled:opacity-50"
                     >
                       Open playlist
                     </Button>

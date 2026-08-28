@@ -84,10 +84,24 @@ const FEATURED_ICONS: Record<string, React.ReactNode> = {
 }
 
 export function HomeView() {
-  const [data, setData] = useState<AiHome | null>(null)
-  const [featured, setFeatured] = useState<FeaturedResponse | null>(null)
+  // ---- INSTANT PAINT (the "opening takes a while" fix) --------------------
+  // The last home payload is mirrored in localStorage; the very first render
+  // paints from it and the network refresh swaps in behind it. Cold LLM
+  // latency (first open / cache expiry) never blocks the shell again.
+  const HOME_SNAPSHOT_KEY = 'tsf-home-snapshot'
+  const readSnapshot = (): { data: AiHome | null; featured: FeaturedResponse | null } => {
+    try {
+      const raw = localStorage.getItem(HOME_SNAPSHOT_KEY)
+      if (!raw) return { data: null, featured: null }
+      const j = JSON.parse(raw)
+      return { data: j.data ?? null, featured: j.featured ?? null }
+    } catch { return { data: null, featured: null } }
+  }
+  const [snap] = useState(readSnapshot)
+  const [data, setData] = useState<AiHome | null>(snap.data)
+  const [featured, setFeatured] = useState<FeaturedResponse | null>(snap.featured)
   const [recent, setRecent] = useState<HistoryTrack[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!snap.data)
   const [aiOpen, setAiOpen] = useState(false)
   const playQueue = usePlayer((s) => s.playQueue)
   const likedTracks = useLibrary((s) => s.likedTracks)
@@ -112,9 +126,11 @@ export function HomeView() {
         if (!cancelled) {
           setData(homeRes)
           setFeatured(featRes)
+          try { localStorage.setItem(HOME_SNAPSHOT_KEY, JSON.stringify({ data: homeRes, featured: featRes, savedAt: Date.now() })) } catch { /* quota — non-fatal */ }
         }
       } catch {
-        if (!cancelled) { setData(null); setFeatured(null) }
+        // keep the snapshot on failures — a stale home beats an empty one
+        if (!cancelled) setLoading(false)
       } finally {
         if (!cancelled) setLoading(false)
       }

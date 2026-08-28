@@ -37,11 +37,12 @@ import { usePlayer, type PlayerTrack } from '@/store/player'
 import { useLibrary, type Playlist } from '@/store/library'
 import { useNav, api } from '@/store/nav'
 import { Shelf } from '@/components/shared'
+import { YourSound } from '@/components/mindbeat/YourSound'
 
 /** localStorage key mirrored by AudioEngine's skipSegments logic. */
 const SKIP_KEY = 'tsf-skip-segments'
 
-type LibChip = 'all' | 'playlists' | 'history' | 'playback'
+type LibChip = 'all' | 'playlists' | 'history' | 'playback' | 'sound'
 type SortKey = 'recents' | 'alpha' | 'songs'
 
 const SORT_LABEL: Record<SortKey, string> = {
@@ -264,6 +265,7 @@ export function LibraryView() {
           ['all', 'All'],
           ['playlists', 'Playlists'],
           ['history', 'Recently played'],
+          ['sound', 'Your Sound'],
           ['playback', 'Playback'],
         ] as const).map(([key, label]) => (
           <button
@@ -452,8 +454,13 @@ export function LibraryView() {
                   onClick={() => playQueue(visibleHistory, i, 'Recently played')}
                 >
                   <div className="relative shrink-0">
-                    { }
-                    <img src={t.thumbnail} alt="" className="w-12 h-12 object-cover rounded-[4px]" loading="lazy" />
+                    {t.thumbnail ? (
+                      <img src={t.thumbnail} alt="" className="w-12 h-12 object-cover rounded-[4px]" loading="lazy" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-[4px] bg-[#282828] flex items-center justify-center">
+                        <Music2 size={18} className="text-[#535353]" />
+                      </div>
+                    )}
                     <span className="card-play-btn absolute inset-0 m-auto w-10 h-10 rounded-full bg-[#1ed760] text-black items-center justify-center hidden group-hover:flex hover:scale-105">
                       <Play size={16} fill="currentColor" />
                     </span>
@@ -468,6 +475,9 @@ export function LibraryView() {
           )}
         </div>
       )}
+
+      {/* ================= YOUR SOUND — Wrapped-grade stats ================= */}
+      {chip === 'sound' && <YourSound />}
 
       {/* ================= PLAYBACK SETTINGS ================= */}
       {chip === 'playback' && <PlaybackSettings />}

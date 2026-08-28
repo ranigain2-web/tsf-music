@@ -43,12 +43,13 @@ import {
 import { usePlayer, fmtTime, type PlayerTrack } from '@/store/player'
 import { seekTo } from '@/store/audio'
 import { useLibrary } from '@/store/library'
-import { api, useNav } from '@/store/nav'
+import { useNav } from '@/store/nav'
 import { Slider } from '@/components/ui/slider'
 import { dominantColor } from '@/lib/color'
 import { SyncedLyrics } from './SyncedLyrics'
 import { QueuePanel } from './QueuePanel'
 import { useWakeLock } from '@/hooks/useWakeLock'
+import { fetchMindbeatRadio } from '@/lib/radio-v2'
 import SourceBadge from './SourceBadge'
 
 export function FullScreenNowPlaying() {
@@ -84,7 +85,6 @@ export function FullScreenNowPlaying() {
   const smartShuffle = usePlayer((s) => s.smartShuffle)
   const smartShuffleLoading = usePlayer((s) => s.smartShuffleLoading)
   const toggleSmartShuffle = usePlayer((s) => s.toggleSmartShuffle)
-  const applySmartShuffle = usePlayer((s) => s.applySmartShuffle)
 
   // Keep the screen on while lyrics are up and music is playing —
   // same behavior as Spotify's lyrics screen.
@@ -258,6 +258,15 @@ export function FullScreenNowPlaying() {
                   if (radioLoading) return
                   setRadioLoading(true)
                   try {
+                    // RADIO V2: Mindbeat Decision Engine first (drift control +
+                    // 7-day dedup); legacy InnerTube radio stays as fallback.
+                    const picks = await fetchMindbeatRadio(track, 25)
+                    if (picks?.length) {
+                      const tracks = picks[0]?.videoId === track.videoId ? picks : [track, ...picks]
+                      usePlayer.getState().playQueue(tracks, 0, `${track.title} · Radio`)
+                      setSleepMenuOpen(false)
+                      return
+                    }
                     const r = await fetch(`/api/ytm/radio?id=${encodeURIComponent(track.videoId)}`)
                     if (r.ok) {
                       const j = (await r.json()) as { tracks?: PlayerTrack[] }
@@ -429,7 +438,7 @@ export function FullScreenNowPlaying() {
               <Shuffle size={22} fill={shuffle ? 'currentColor' : 'none'} />
             </button>
             <button
-              onClick={prev}
+              onClick={() => prev()}
               className="text-white/80 hover:text-white transition-transform max-lg:scale-110 active:scale-95"
               aria-label="Previous track"
               title="Previous"
@@ -450,7 +459,7 @@ export function FullScreenNowPlaying() {
               )}
             </button>
             <button
-              onClick={next}
+              onClick={() => next()}
               className="text-white/80 hover:text-white transition-transform max-lg:scale-110 active:scale-95"
               aria-label="Next track"
               title="Next"
@@ -518,27 +527,14 @@ export function FullScreenNowPlaying() {
               <Download size={14} /> Save
             </button>
             <button
-              onClick={async () => {
+              onClick={() => {
                 toggleSmartShuffle()
-                // If turning ON, fetch smart-shuffled queue immediately
+                // If turning ON, fetch smart-shuffled queue immediately.
+                // SMART SHUFFLE V2: the Mindbeat Decision Engine picks the rec
+                // slots (cadence + queue healing + vibe-lock live in the store;
+                // legacy /api/ai/smart-shuffle stays as the in-store fallback).
                 if (!smartShuffle && queue.length >= 2) {
-                  usePlayer.setState({ smartShuffleLoading: true })
-                  try {
-                    const r = await api<{ tracks: PlayerTrack[]; insertedAt: number[] }>(
-                      '/api/ai/smart-shuffle',
-                      {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ tracks: queue, count: 10 }),
-                      }
-                    )
-                    if (r.tracks?.length) {
-                      applySmartShuffle(r.tracks, r.insertedAt || [])
-                    }
-                  } catch { /* skip */ }
-                  finally {
-                    usePlayer.setState({ smartShuffleLoading: false })
-                  }
+                  void usePlayer.getState().requestSmartShuffle()
                 }
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors border ${
