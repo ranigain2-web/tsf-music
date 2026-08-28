@@ -257,6 +257,10 @@ jobs:
       - name: Lint + typecheck (web layer)
         run: |
           bun install
+          # The generated Prisma client (node_modules/.prisma) is gitignored —
+          # without this, @prisma/client is a stub with no PrismaClient export
+          # and tsc cascades dozens of false errors (seen 2026-08-28).
+          bunx prisma generate
           bun run lint
           bunx tsc -p tsconfig.ci.json
 
