@@ -289,3 +289,26 @@ Stage Summary:
 - Unresolved: head=1 vs redirect provider labels can disagree under in-flight dedup (cosmetic, SourceBadge may mislabel during live dedup); wall-window intl full-length % depends on IP reputation (cookies = next lever); SabrStream+webpo direct path still unexploited (googlevideo lib works, needs PO mint).
 - Recommended next (R2): mobile UI gauntlet vs BAR-B (home filter chips Music/Podcasts, mini-player exact h-84 spec, NP screen order) + wire head/redirect provider consistency; then R3 Capacitor iOS + workflows.
 - R2 piece landed in same round (styling/feature mandate): Spotify 2023+ HOME FILTER CHIPS per BAR-B §2.2 — Music/Podcasts/Audiobooks pill row on home (active = white bg + black text, inactive = #2a2a2a; role=tablist/tab, aria-selected; no-scrollbar overflow row). Non-music tabs show honest empty state (mic/book icon, "No podcasts yet — TSF is a music-only station"). Browser-verified at 390×844: tab selection + empty state render exactly (qa/r2-chips.png, r2-chips-podcasts.png). Lint 0 errors.
+
+---
+Task ID: 6
+Agent: Z.ai Code (cron R2 — mobile UI gauntlet, first pieces)
+Task: R2 of gauntlet — Now Playing anatomy vs BAR-B §2.5/§2.6 + BAR-A token assertion.
+
+Work Log:
+- Status: app healthy, POT service alive (uptime 20min), lint clean. Proceeded to R2.
+- NP SCREEN (FullScreenNowPlaying.tsx) vs BAR-B §2.5 — 3 fixes:
+  1. Play/pause button white → SPOTIFY GREEN #1ed760 with black icon (BAR-A primary token).
+  2. Close button X → ChevronDown (Spotify collapse affordance).
+  3. LYRICS DOMINANT-COLOR BACKGROUND — new src/lib/color.ts: client-side dominant color extraction from album art (24×24 downscale → HSV saturation²×brightness-weight scoring → hue-bucket winner → 0.78 darken for text contrast; session cache, CORS-taint safe). Wired as a gradient layer over the ambient wash that fades in (700ms) only when lyrics are open; SyncedLyrics containers lightened (black/30 + blur) so the color shows through.
+- BROWSER VERIFICATION (390×844):
+  - r2-np-screen.png: chevron-down / PLAYING FROM QUICK PICKS / ⋯ / big art / title+artist+heart / slider / shuffle|prev|GREEN play|next|repeat / Lyrics-Queue-Save-Smart pills — full Spotify anatomy.
+  - r2-np-lyrics.png: whole lyrics screen wears the dominant color extracted from the current single's art (warm mocha), karaoke lines (current bold white, rest dimmed), green active Lyrics pill.
+  - BAR-A token assertion via agent-browser eval: playBtnBg rgb(30,215,96)=#1ed760 EXACT, bodyBg rgb(18,18,18)=#121212 EXACT, activeChip white, accent #1ed760 — PASS.
+- Auto-advance after 30s preview verified again in passing (Blank Space → The One That Got Away, lyrics followed).
+- Lint: 0 errors.
+
+Stage Summary:
+- R2 pieces done: NP control order + green play + chevron-down + DOMINANT-COLOR LYRICS (Spotify's signature) + BAR-A tokens asserted live. The two most identity-defining mobile surfaces (home chips, NP screen) now match Spotify anatomy.
+- Next R2 remainder: mini-player exact h-84 spec + mini progress hairline, Library chips + 3-col grid, search Browse-all tiles; then R3 Capacitor iOS + workflows.
+- Risks: dominantColor depends on image CORS (yt3.googleusercontent + saavncdn send ACAO:*; jiosaavn 500x500 art confirmed working) — fallback keeps ambient wash, no breakage.

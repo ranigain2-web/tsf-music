@@ -100,7 +100,7 @@ export function SyncedLyrics({ track }: { track: PlayerTrack }) {
 
   if (loading) {
     return (
-      <div className="w-full lg:w-[420px] xl:w-[480px] aspect-square lg:h-[420px] xl:h-[480px] rounded-lg bg-black/60 flex items-center justify-center text-white/60">
+      <div className="w-full lg:w-[420px] xl:w-[480px] aspect-square lg:h-[420px] xl:h-[480px] rounded-lg bg-black/30 backdrop-blur-sm flex items-center justify-center text-white/60">
         <Loader2 size={32} className="animate-spin" />
       </div>
     )
@@ -108,7 +108,7 @@ export function SyncedLyrics({ track }: { track: PlayerTrack }) {
 
   if (error) {
     return (
-      <div className="w-full lg:w-[420px] xl:w-[480px] aspect-square lg:h-[420px] xl:h-[480px] rounded-lg bg-black/60 flex flex-col items-center justify-center text-white/60 gap-2 p-6 text-center">
+      <div className="w-full lg:w-[420px] xl:w-[480px] aspect-square lg:h-[420px] xl:h-[480px] rounded-lg bg-black/30 backdrop-blur-sm flex flex-col items-center justify-center text-white/60 gap-2 p-6 text-center">
         <Mic2 size={32} />
         <div className="text-sm">{error}</div>
         <div className="text-xs text-white/40">Try another track or enjoy the music.</div>
@@ -121,7 +121,7 @@ export function SyncedLyrics({ track }: { track: PlayerTrack }) {
     <div
       ref={scrollRef}
       onScroll={onManualScroll}
-      className="w-full lg:w-[420px] xl:w-[480px] h-[420px] xl:h-[480px] rounded-lg bg-gradient-to-b from-white/5 to-black/40 overflow-y-auto py-[40%] px-6 text-center hide-scrollbar"
+      className="w-full lg:w-[420px] xl:w-[480px] h-[420px] xl:h-[480px] rounded-lg bg-gradient-to-b from-black/15 to-black/35 backdrop-blur-[2px] overflow-y-auto py-[40%] px-6 text-center hide-scrollbar"
     >
       {lines.map((line, i) => {
         const isCurrent = i === currentIdx
