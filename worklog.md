@@ -805,3 +805,16 @@ Stage Summary:
 - Telemetry contract established for every future shelf: stable server-side id + SHELF_EXPOSURE (attention denominator) + markQueueSource(…, shelfId) (attribution numerator) → starts/completes/saves/skip@3 aggregate with zero new client plumbing per shelf.
 - Verification trail: synthetic-seed math reproduced hand-computed scores exactly (1.1375 vs −0.0542, median 0.5417, champion genre-pop), and every synthetic row was removed with prefix-scoped deletes re-verified to zero. Cold start = curated order, mode 'cold'.
 - Files: NEW src/lib/mindbeat/shelf-bandit.ts; changed src/app/api/ai/home/route.ts (stable ids + bandit wiring + cache v2), src/components/views/HomeView.tsx (exposure/stamp telemetry + 'rising' suffix), src/lib/mindbeat/client.ts (shelfExposure + shelfId plumbing), src/lib/mindbeat/ledger.ts (SHELF_EXPOSURE type + shelfId passthrough + getRecentEventsByType), src/components/player/AudioEngine.tsx (2-line shelfId pass-through). Screenshots: tsf-analysis/qa/t15c-home-bandit-live.png, t15c-home-bandit-scrolled.png, t15c-home-mobile-390.png, t15c-home-restored-cold.png.
+
+---
+Task ID: 15-e
+Agent: Z.ai Code (orchestrator)
+Task: Wave 15 final verification + commit + push
+
+Work Log:
+- Full-wave gate: bun run lint exit 0; tsc --noEmit zero errors in src/ (only pre-existing tsf-analysis/ noise); dev.log free of runtime errors.
+- Golden-path browser QA: Home renders (greeting + Now Sound + Daily Mixes, bandit order stable); clicking the Now Sound shelf opens the Daylist as a full playlist page — "Saturday Morning Easy Pop · Shifts around 12 pm · 26 songs, 1 hr 16 min" with gradient hero; play from the track list → Pause UI active, /api/stream 206 partial-content flows for The Climb (Miley Cyrus), preflight HEADs for the queue. Zero console errors.
+- Commit 3406838 pushed to origin/main (42 files: 4 tasks' source + worklog + 21 QA screenshots + the user's duplicate plan upload); local and remote in sync (0/0).
+
+Stage Summary:
+- WAVE 15 COMPLETE — the four biggest remaining plan gaps are closed: trust (§10.4 kill switches enforced everywhere), time intelligence (§9.4 daylist rebuilds from the block matrix), discovery flagship (§9.6 On the Rise with honest chains), flagship generator polish (§9.3 clarify + honest variants + save), and Home now learns which shelf deserves the top slot (§8.6 bandit). CI (macOS DMG / Android APK / iOS IPA) building on 3406838.
