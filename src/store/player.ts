@@ -14,7 +14,8 @@
 
 import { create } from 'zustand'
 import { SMART_SHUFFLE } from '@/lib/mindbeat/types'
-import { notifyUserSkip } from '@/lib/mindbeat/client'
+import { notifyUserSkip, surfaceFlags } from '@/lib/mindbeat/client'
+import { toast } from 'sonner'
 
 /** True when the CURRENT transition was user-initiated — consumed by the
  * audio-engine cleanup to grade the leaving listen as TRACK_SKIP. Lives on
@@ -106,8 +107,10 @@ interface PlayerState {
   tickSleepTimer: (deltaMs: number) => void
   setCrossfade: (ms: number) => void
   toggleSmartShuffle: () => void
-  /** SMART SHUFFLE V2: fetch recs from the Mindbeat engine and apply. */
-  requestSmartShuffle: () => Promise<void>
+  /** SMART SHUFFLE V2: fetch recs from the Mindbeat engine and apply.
+   *  opts.explicit marks a user-initiated Smart press (default true) — only
+   *  explicit presses may toast when the rec kill switch swallows the call. */
+  requestSmartShuffle: (opts?: { explicit?: boolean }) => Promise<void>
   applySmartShuffle: (augmentedQueue: PlayerTrack[], insertedAt: number[]) => void
 }
 
@@ -237,6 +240,11 @@ async function fetchRecPicks(
   exclude: string[]
 ): Promise<EnginePickLite[] | null> {
   if (count <= 0 || recVibeLock) return null
+  // KILL SWITCH (plan §10.4): 'tsf-mindbeat-off' === 'on' → ZERO recs from
+  // this store — neither batch augmentation nor queue healing reaches the
+  // engine. Flags ride along so the route can enforce server-side too.
+  const flags = surfaceFlags()
+  if (flags.recsOff) return null
   try {
     const r = await fetch('/api/mindbeat/next-up', {
       method: 'POST',
@@ -247,6 +255,7 @@ async function fetchRecPicks(
         surface: 'smart_shuffle_rec',
         exclude,
         session: { recent: sessionRecent, skipStormCount: recSkipsInARow },
+        flags,
       }),
     })
     if (r.ok) {
@@ -298,6 +307,8 @@ async function fetchOneHealedPick(seed: SessionListenLite & { title?: string }, 
  * Backoff/tighten counters steer the next full augmentation's cadence.
  */
 async function healRecSlot(skipped: PlayerTrack): Promise<void> {
+  // KILL SWITCH: recs off → healing stays off too (passive path, never toasts).
+  if (surfaceFlags().recsOff) return
   if (recVibeLock || healsUsed >= MAX_HEALS_PER_SESSION) return
   const { queue, queueIndex, smartShuffle } = usePlayer.getState()
   if (!smartShuffle) return
@@ -560,10 +571,23 @@ export const usePlayer = create<PlayerState>((set, get) => ({
 
   toggleSmartShuffle: () => set((s) => ({ smartShuffle: !s.smartShuffle })),
 
-  requestSmartShuffle: async () => {
+  requestSmartShuffle: async (opts) => {
     const { queue, smartShuffle } = get()
     if (!smartShuffle || queue.length < 2 || recVibeLock) {
       set({ smartShuffleLoading: false })
+      return
+    }
+    // KILL SWITCH (plan §10.4): 'tsf-mindbeat-off' === 'on' → the queue stays
+    // classic (no recs injected, no legacy fallback, healing skipped). The
+    // toast fires ONLY on the explicit Smart-button path — passive heal
+    // entries never call this with a toast-worthy context.
+    if (surfaceFlags().recsOff) {
+      set({ smartShuffleLoading: false })
+      if (opts?.explicit !== false) {
+        try {
+          toast('Recommendations are off — playing your music straight')
+        } catch { /* toast is cosmetic */ }
+      }
       return
     }
     set({ smartShuffleLoading: true })
@@ -585,7 +609,10 @@ export const usePlayer = create<PlayerState>((set, get) => ({
             .map((p) => toRecTrack(p.track, p.reasonLine))
           if (recs.length) augmentation = interleaveRecs(queue, recs)
         }
-        if (!augmentation && !recVibeLock) augmentation = await fetchLegacySmartShuffle(queue, count)
+        // legacy fallback honors the kill switch too (flag may flip mid-flight)
+        if (!augmentation && !recVibeLock && !surfaceFlags().recsOff) {
+          augmentation = await fetchLegacySmartShuffle(queue, count)
+        }
         if (augmentation) get().applySmartShuffle(augmentation.tracks, augmentation.insertedAt)
       }
     } finally {

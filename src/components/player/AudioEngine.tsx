@@ -529,6 +529,7 @@ export function AudioEngine() {
         surface: startCtx.surface,
         wasRecommended: startCtx.wasRecommended,
         reasonCode: startCtx.reasonCode,
+        shelfId: startCtx.shelfId,
         queuePosition: queueIndex,
         duration: track.duration && isFinite(track.duration) && track.duration > 0 ? track.duration : undefined,
       }
@@ -609,6 +610,7 @@ export function AudioEngine() {
             wasRecommended: endCtx.wasRecommended,
             reasonCode: endCtx.reasonCode,
             surface: endCtx.surface,
+            shelfId: endCtx.shelfId,
             forceType: userSkip ? 'TRACK_SKIP' : undefined,
           })
         }

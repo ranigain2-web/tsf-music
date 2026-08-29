@@ -288,11 +288,14 @@ function SectionTitle({ children, icon }: { children: React.ReactNode; icon?: Re
 function KillSwitch({
   title,
   description,
+  hint,
   checked,
   onChange,
 }: {
   title: string
   description: string
+  /** optional subtitle rendered under the description (e.g. effect timing) */
+  hint?: string
   checked: boolean
   onChange: (next: boolean) => void
 }) {
@@ -301,6 +304,7 @@ function KillSwitch({
       <div className="min-w-0">
         <div className="text-[14px] font-medium text-white">{title}</div>
         <div className="text-[12px] text-[#a7a7a7] mt-0.5 leading-relaxed">{description}</div>
+        {hint && <div className="text-[11px] text-[#1ed760]/80 mt-1">{hint}</div>}
       </div>
       <Switch
         checked={checked}
@@ -789,6 +793,7 @@ export function TasteDNA({
                   <KillSwitch
                     title="Disable all recommendations"
                     description="Classic shuffle only. MindBeat stops learning and the engine stops picking."
+                    hint="Takes effect on your next queue."
                     checked={recOff}
                     onChange={toggleRec}
                   />

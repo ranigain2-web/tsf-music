@@ -149,6 +149,9 @@ export interface DecideExtraOpts {
   energies?: number[]
   /** seed tracks with titles — anchors for truth-conditioned NEIGHBOR lines */
   neighborAnchors?: NeighborAnchor[]
+  /** kill switch (plan §10.4): exploration disabled → ε forced to 0, no
+   *  FRESH_FIND/explore slots anywhere. Everything else behaves identically. */
+  exploreOff?: boolean
 }
 
 export interface DecideOpts {
@@ -348,7 +351,13 @@ export function decide(opts: DecideOpts): EnginePick[] {
 
   const vibe = computeVibe(session, { energies: extra.energies, surface: extra.surface })
   // SKIP_STORM → ε=0 (EPSILON.storm): no experiments during a fire
-  const epsilon = vibe === 'SKIP_STORM' ? EPSILON.storm : (profile.exploration.epsilon ?? EPSILON.established)
+  // exploreOff (kill switch 'tsf-mindbeat-noexplore') → ε=0: exploration is
+  // user-disabled, so hash01 < 0 never fires and explore slots vanish.
+  const epsilon = extra.exploreOff
+    ? 0
+    : vibe === 'SKIP_STORM'
+      ? EPSILON.storm
+      : (profile.exploration.epsilon ?? EPSILON.established)
 
   // ---- pre-filter + dedupe -------------------------------------------------
   const mutedArtists = new Set(profile.corrections.mutedArtists)

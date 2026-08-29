@@ -11,6 +11,7 @@
 
 import type { PlayerTrack } from '@/store/player'
 import type { EnginePick } from '@/lib/mindbeat/types'
+import { surfaceFlags } from '@/lib/mindbeat/client'
 
 interface PickShape {
   track: {
@@ -48,6 +49,10 @@ export async function fetchMindbeatRadio(
   exclude: string[] = []
 ): Promise<PlayerTrack[] | null> {
   try {
+    // KILL SWITCH (plan §10.4): 'tsf-mindbeat-off' === 'on' → resolve null so
+    // callers fall back to the legacy non-personalized radio endpoint.
+    const flags = surfaceFlags()
+    if (flags.recsOff) return null
     const r = await fetch('/api/mindbeat/radio', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -62,6 +67,7 @@ export async function fetchMindbeatRadio(
         },
         count,
         exclude,
+        flags,
       }),
     })
     if (!r.ok) return null

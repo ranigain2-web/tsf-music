@@ -1,0 +1,649 @@
+SUGGESTION PLAN — IMPROVING AI
+Project MINDBEAT v2.0 · Industrial Edition
+From "On-Device Rules" to Intelligence That Beats Spotify Where It Counts
+Version: 2.0 (Industrial) · Status: Builder-ready handoff · Supersedes: PROJECT-MINDBEAT-AI-PLAN.md v1.0
+Scope: Every intelligent surface of TSF Music — Smart Shuffle, Autoplay Radio, AI Playlist Generator, Daily Mixes, Home, Search, Stats — plus the invisible background systems that make them feel alive.
+Research basis: Every external claim in this document was verified against a primary source during this session (full list in §16; digest in research/RESEARCH-DIGEST.md).
+
+How to read this document: It is written for an AI builder. Each subsystem section answers three questions in words first — what to include, why it must exist, and how it should work — with schemas and numbers only where they remove ambiguity. Every number (weight, threshold, half-life) is a starting value with a stated tuning protocol, never a magic constant. Every subsystem ends with binary acceptance criteria: they either hold or they don't. §14 defines the builder/critic loop the work must run under. Do not begin at §9 — the surfaces depend on layers that must exist first (§12 explains the order).
+
+0. The Prime Directive
+The app must feel like it is listening back. Not in a creepy sense — in the sense of a great radio DJ: it remembers what you loved last week, reads the room right now, never repeats itself, earns your trust with honest reasons, and still hands you a song you didn't know you needed.
+
+Spotify defined the modern ceiling for this. We studied their documented mechanics (BaRT bandits, Smart Shuffle's official spec, daylist's time-block model, the skip science they published, Text2Tracks, their new Taste Profile). Our target is to match that ceiling and pass it in the places where a standalone, privacy-first, India-first app can be structurally better (§2.3). Every design decision below serves six observable properties:
+
+Reactive — a skip is a signal within the same session. The next recommended track must measurably change because of it. Today it does not (verified gap G1).
+Remembering — what you played last Tuesday at 11pm must shape tonight's 11pm suggestions. Today only a raw recency list exists (verified gap G2/G6).
+Reading the room — the app models the session: energy arc, vibe drift, skip storms, workout-vs-focus context. Today the session is invisible.
+Risk-taking on your behalf — a fixed, accountable exploration budget so the app finds your next favorite artist before you do. Today exploration is accidental and unaccountable (verified gap G3).
+Honest — every recommendation carries a truthful explanation built only from evidence the app actually has (no fake "fans also liked" — we have no other fans). And the user can open the hood and see and edit their own taste model. Spotify started this with Taste Profile (beta, Mar 2026); we finish it.
+Respectful of attention — the app never becomes noisy. Intelligence works in the background, surfaces only where it helps, and every "smart" behavior has a kill switch to dumb-but-predictable.
+1. Executive Summary
+TSF Music v2.1 has a genuinely good skeleton: on-device listening graph, a real two-layer safety filter, staged playlist-generator UX, background radio that survives UI death, Smart Shuffle with the right UX shape (sparkle-badged interleaved recs, verified against Spotify's published cadence). But its intelligence is rule-based and amnesiac. The seven verified gaps (G1–G7, §2.3) all trace to one root cause: the app throws away almost all of its own experience. Skips vanish, times-of-day vanish, sessions vanish, what it recommended before vanishes.
+
+This plan installs a six-layer intelligence architecture (§4):
+
+text
+
+L1 SIGNAL   — the Event Ledger: every play/skip/complete/like/seek becomes graded evidence
+L2 MEMORY   — the Taste Profile: time-decayed, daypart-aware, multi-dimensional, editable
+L3 SESSION  — the Session Brain: vibe state, energy arc, co-play similarity graph
+L4 DECISION — the Decision Engine: scoring + exploration budget + truthful explanations
+L5 SURFACES — Smart Shuffle v2 · Radio v2 · AI Playlist v2 · Daylist · Mixes v2 · Discovery · Your Sound · Vibe Search
+L6 TRUST    — Safety (inherited+extended) · Privacy (on-device first, export/reset) · Guardrails & kill switches
+The headline upgrades, in priority order:
+
+#
+Upgrade
+One-line effect
+1	Event Ledger + graded Listen Score	Every skip/complete/partial-play becomes weighted evidence instead of a lost event — including where in the song you bailed (a 4-second skip and a 95% skip are opposite signals)
+2	Taste Profile with daypart matrix	A living, decaying model across artist/genre/mood/era/language + five time blocks × weekday/weekend (the exact structure verified in Heggli's 2-billion-event study)
+3	Smart Shuffle v2 (queue healing + vibe-lock)	Skipping a rec triggers an instant smarter replacement; skipping two in a row makes the app back off and change direction — the signature "it's listening back" moment
+4	AI Playlist Generator v2	Five-stage LLM pipeline (Understand → Hunt → Curate → Polish → Narrate) with an ID-in/ID-out hallucination contract and a heuristic fallback ladder — multi-facet, Hinglish-native, negation-aware
+5	Session Brain + co-play graph	Track-to-track similarity learned from your own adjacent listens (the verified science: simple neighborhood models rival neural ones), energy-arc continuity, skip-storm recovery
+6	Daylist ("Now Sound")	Five time-block surfaces with generated microgenre names ("'90s rave rainforest late night" is the verified pattern; ours will be vernacular: midnight riyaz, monsoon ghazals)
+7	Radio v2 + Daily Mixes v2	Multi-seed radio with drift control and 7-day dedup memory; two-axis mixes that absorb same-day listening
+8	Decision Engine	Verified BaRT-style explore/exploit with budget accounting and a truthful explanation attached to every recommendation
+9	Your Sound (Wrapped-grade)	30-second rule, listening clock, streaks, skip-profile stats, December story — computed from the ledger, not from a parallel tally
+10	Taste DNA transparency screen	See and edit what the app believes about you; export/reset your full profile — beyond Spotify's beta
+
+Non-goals (said out loud): no accounts, no cross-user collaborative filtering, no telemetry, no cloud profile. Where Spotify uses millions of users, we use LLM-encoded cultural priors + your own co-play graph. Where Spotify can't show you the model, we show you everything.
+
+2. Verified Research Foundation
+This section is the load-bearing wall: it separates what is proven from what we invent. The builder must treat §2.1/§2.2 as constraints from reality and §2.3 as the local translation layer.
+
+2.1 Product-verified mechanisms (the bars exist; fetch them)
+Smart Shuffle — official spec. Spotify's own announcement states: "For a playlist with more than 15 songs, we'll recommend one song for every three tracks. And the best part, your original playlist remains untouched." Recommended tracks carry a sparkle badge; the shuffle icon cycles Off → Classic → Smart. Community reports confirm skipped recs are replaced by different recs, and saving/hearting a rec keeps it. Implication: our UX shape is already correct (v2.1 matches: 1 rec per ~2 upcoming tracks, sparkle badge, persisted toggle). The selection brain is what fails.
+Daylist — the time-block product. Newsroom (Sep 2023): updates multiple times a day between sunup and sundown; built from "niche music and microgenres you usually listen to during particular moments in the day or on specific days of the week"; each update brings new tracks and a new mood-title like "'90s rave rainforest late night"; shows when the next update lands. Implication: time intelligence is a shipped, loved product pattern — and its naming convention (era/genre + niche descriptor + time block) is a copyable craft pattern we will vernacularize.
+AI DJ / AI Playlist / Taste Profile. AI DJ (Feb 2023): generative commentary over a personalized lineup. AI Playlist (Apr 2024): LLM interprets creative prompts, personalization tech curates. Taste Profile (Mar 2026, beta): users can see how Spotify models their taste and steer it. Implication: (a) prompt→playlist via LLM is now the industry-standard front door; (b) "show the user the model" is the new trust frontier — we go further (editable).
+BaRT — the Home decision engine. Two-level ranking (shelves, then cards); success measured as stream >30 seconds, failure as skip before that; saves reinforce; epsilon-greedy explore/exploit — more exploration for new users, more exploitation for established ones; time-of-day is part of context; formal system described in "Explore, Exploit, Explain" (McInerney et al., RecSys 2018): a contextual bandit with a reward model, a training procedure, an explore-exploit policy, and — the key trick — it jointly learns which explanations a user responds to. Implication: our Decision Engine (§8) is a single-user BaRT with truthful explanations.
+Deezer carousel bandits (RecSys 2020, public code): Home shelf personalization as a contextual bandit with multiple plays, cascade-based updates, and delayed batch feedback. Implication: we can reorder Home shelves with a cascade reward — no infrastructure excuses.
+Discover Weekly's three engines: collaborative filtering + NLP on text + raw audio analysis. Implication: our catalog has no audio access; §6.4 defines the honest substitute — a Proxy Feature Space built from LLM cultural priors + metadata + your own behavioral calibration.
+Text2Tracks (Spotify Research, 2025): generative retrieval that maps a prompt directly to track IDs, faster and more accurate than the older parse-then-retrieve two-stage. Implication: our LLM playlist stage (§9.3, S3) adopts the ID-in/ID-out contract — the LLM selects from a real candidate pool by ID, it never invents songs.
+2.2 Science-verified mechanisms
+Skip science (the most important paper for us). Spotify's PLOS ONE study (Montecchio, Roy, Pachet 2020): "a quarter of all streamed songs are skipped within the first five seconds, and only roughly half of all songs are listened to in their entirety." Skips concentrate right after musical-section changes (intro→verse etc.), and a track's Skip Profile — the histogram of skip positions — is stable across dates and regions, i.e., it is a learnable property of the song itself. Implications: (a) skip POSITION carries graded meaning — instant = reflex/context mismatch, mid = considered, late = near-like; (b) per-track skip profiles accumulate into a durable asset; (c) intro behavior matters — a track skipped at 4s tells us more about fit than about quality.
+Session modeling is canonical. WSDM 2019 Sequential Skip Prediction Challenge (with Spotify): predict skips from session context — the task is established science. GRU4Rec (ICLR 2016) founded session-based RNN recs; but the follow-up evaluation literature found simple session-kNN / ItemKNN baselines often match or beat neural session models, and a 2023 comparison found simple models beating recent GNNs. SASRec beats BERT4Rec consistently. Implication: a well-built on-device co-occurrence neighborhood (§7.3) is scientifically respectable — we do not need to train neural models to be credible.
+Implicit feedback needs graded confidence. The classic implicit-feedback model (Hu, Koren, Volinsky 2008) weights events by confidence, not binary play. Implication: our Listen Score (§5.2) is graded evidence with per-event confidence, and time-decayed.
+Diurnal taste structure. Heggli et al. 2021 (Royal Society Open Science; 2 billion+ Spotify events): listening divides into five stable blocks — morning, afternoon, evening, night, late-night/early-morning; block order holds across the week but boundaries and lengths differ between workdays and weekends; chronotypes (morning-type/evening-type people) shift personal timing. Implication: our daypart matrix is 5 blocks × {weekday, weekend}, with personal boundaries learned per user, not hardcoded population ones.
+Emotion model. Russell's circumplex (valence × arousal) is the standard dimensional model in music-emotion research; emotion-aware recommenders compare listener state to track coordinates in this plane. Implication: our Proxy Feature Space uses exactly two axes — energy (arousal) and valence — as first-class citizens, plus tempo-class and acoustic-ness as supporting dimensions.
+Evaluation metrics. Beyond accuracy: novelty, serendipity, catalog coverage, intra-list similarity (ILS) for diversity, aggregate diversity. Implication: §11 defines our success with this full metric family, not just "it feels better".
+2.3 Where we can beat the ceiling (and where we honestly can't)
+Structurally better (we commit to these):
+
+Full transparency. Spotify's Taste Profile is a beta showing curated aggregates. We show the entire model — every artist weight, every daypart belief, the last 90 days of ledger events — and make it editable (mute/boost/wrong). Trust is a feature.
+Zero-latency, zero-server intelligence. All scoring happens on-device in milliseconds. No cold cloud calls, no A/B-by-region politics: the user gets the best engine we can build, always.
+Instant queue healing. Spotify replaces a skipped rec "eventually." We re-rank the next slot immediately with a different pool (§9.1) — the reactive property Spotify's cadence doesn't attempt.
+Honest explanations. We can never say "fans also like" (there are no other fans — and faking social proof is banned). Every explanation maps to a real ledger fact. Ironically this makes our explanations more trustworthy than average.
+India-first cultural intelligence. Hinglish/code-mixed prompt understanding ("chill gaane for late night drive, no party"), vernacular microgenre naming (bhakti mornings, monsoon ghazals, gym desi bass, slowed+reverb late-night culture), devotional dayparts, 90s-nostalgia blocks, regional language awareness (Punjabi/Tamil/Telugu/Bhojpuri). Spotify's daylist naming is English-cool; ours is vernacular-warm.
+No commercial bias. Spotify Home mixes editorial/promotional deals with personalization. Our bandit optimizes exactly one thing: your listening reward.
+Honestly constrained (we design around, never fake):
+
+No audio buffer access in React Native without native modules → Proxy Feature Space (§6.4), with a documented optional native-module upgrade path (P7).
+No cross-user CF → LLM cultural priors + co-play graph; expectations set accordingly for pure-cold-start novelty.
+JioSaavn catalog quirks (degraded search, URL expiry) → already handled by v2.1 recovery; intelligence layer must treat "unplayable" as its own signal (a rec that 404s twice is demoted regardless of taste fit).
+3. The Bars — Gauntlet Setup (v2.0)
+Every subsystem gets a Named + Fetchable + Comparable bar. The builder's output for each subsystem is judged blind against its bar by an independent critic with fresh context, and loops until it wins (protocol: §14). A bar that can't be fetched is a bar that will be hallucinated; each bar below names its fetchable artifact.
+
+#
+Subsystem
+Bar (Named + Fetchable)
+How the critic compares (Comparable)
+B1	Smart Shuffle v2	Spotify's official Smart Shuffle spec (Community announcement, Nov 2022) + Newsroom launch: verified cadence "1 per 3 tracks (>15-song playlists)", sparkle badge, original playlist untouched	Queue-level A/B: same 25-track seed playlist, same session script; compare rec relevance, vibe-match, cadence respect, skip-recovery behavior across 30 slots; score relevance of every rec slot; ours must beat Spotify's documented behavior on relevance AND heal queues after skips (which the bar does not do)
+B2	Skip intelligence	Spotify Sequential Skip Prediction Challenge (WSDM 2019, aicrowd.com) + the PLOS ONE skip study	Replay-test: does a 4s skip vs a 60s skip vs a 95% skip produce measurably different downstream picks? Does a skip at a "section change" equivalent count less than an instant one? Binary unit tests, no vibes
+B3	Playlist generation	Spotify AI Playlist / Text2Tracks (Newsroom Apr 2024; research.atspotify.com Apr 2025)	Blind curator test on 20 standard prompts (Appendix D): TSF v2 vs TSF v1 outputs, labels stripped; judge (fresh-context LLM + human) scores intent-fit, arc, name, description, discovery quality; ours must win ≥60% overall and 100% of negation/Hinglish prompts
+B4	Explore/exploit	"Explore, Exploit, Explain" (McInerney et al., RecSys 2018 — research.atspotify.com) + Deezer carousel bandits (RecSys 2020, github.com/deezer/carousel_bandits)	Log audit: every rec carries a truthful reason code traceable to a ledger event; exploit/explore ratio observable and within budget ±5%; new-user ε > established-user ε by construction
+B5	Dayparting	Heggli et al. 2021 (PMC8580447 / royalsocietypublishing.org) + Spotify daylist (Newsroom Sep 2023)	Shadow-test: same profile at 08:00, 14:00, 19:00, 23:00, 02:30 on weekday vs weekend → five distinct, coherent surfaces; block names and mixtures differ; 11pm never returns the 9am pool
+B6	Home personalization	BaRT (Home shelf/card ranking; 30s reward) + Deezer cascade	Within 2 sessions of scripted engagement, Home shelf order demonstrably adapts (before/after log diff); every card has explanation + reward history
+B7	Radio	Spotify Song Radio / Apple Discovery Station (TechCrunch Aug 2023) as the "endless, non-repetitive, seed-true" bar	2-hour scripted listen: no track repeats within 7 days (dedup memory), ≥70% of tracks share seed's genre/era cluster, drift tracks ≤30% and labeled
+B8	Taste transparency	Spotify Taste Profile beta (Newsroom Mar 2026)	User can list top-10 artists/genres/moods with weights, edit one (mute/boost/wrong), and observe the corresponding surface change within the same session; export produces valid JSON of the full profile
+B9	Session intelligence	WSDM 2019 challenge framing (session-context prediction) + ItemKNN evaluation literature (Hidasi & Czapp 2018)	Session replay: 3 instant-skips trigger SKIP_STORM state (observable in logs), next 2 picks change pool + energy direction; co-play graph recall: given seed track, top-5 neighbors are co-played or same-cluster tracks, verified on synthetic sessions
+B10	Trust & safety	v2.1's own two-layer filter (the incumbent we must not regress)	All algorithmic surfaces return 0 unsafe tracks on the safety corpus; transliteration-variant corpus (new) also returns 0; search badges "E" without filtering
+
+4. The Intelligence Architecture — Six Layers
+What: One dependency-ordered stack. L1 captures evidence, L2 remembers, L3 reads the room, L4 decides, L5 presents, L6 keeps it safe and honest.
+
+text
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ L5 SURFACES   Smart Shuffle v2 · Radio v2 · AI Playlist v2 ·          │
+│               Daylist · Daily Mixes v2 · On the Rise · Your Sound ·   │
+│               Vibe Search · Onboarding · Taste DNA                    │
+├──────────────────────────────────────────────────────────────────────┤
+│ L4 DECISION   Decision Engine: candidate pools → scoring formula →    │
+│               exploration budget → explanation attach → shelf bandit  │
+├──────────────────────────────────────────────────────────────────────┤
+│ L3 SESSION    Session Brain: session state vector · vibe states ·     │
+│               energy arc · co-play similarity graph · dedup memory    │
+├──────────────────────────────────────────────────────────────────────┤
+│ L2 MEMORY     Taste Profile: decaying affinity maps (artist/genre/    │
+│               mood/language/era) · daypart matrix 5×2 · per-track     │
+│               skip profiles · Proxy Feature Space · taste clusters    │
+├──────────────────────────────────────────────────────────────────────┤
+│ L1 SIGNAL     Event Ledger: append-only event log (90d) + aggregates  │
+│               (forever) · graded Listen Score · session reconstruction│
+├──────────────────────────────────────────────────────────────────────┤
+│ L6 TRUST      Safety filter (inherited + transliteration-extended) ·  │
+│               Privacy (on-device, export, reset) · kill switches ·    │
+│               performance budgets                                     │
+└──────────────────────────────────────────────────────────────────────┘
+Why layers: each layer is independently testable (§11 replay tests are per-layer), independently degradable (L4 can fall back to rank-by-affinity if L3 misbehaves), and independently shippable (§12 roadmap ships layers, not demos).
+
+Data-flow contract (the one rule): Surfaces never read the raw ledger; they ask the Decision Engine. The Decision Engine never mutates memory; only L1 writes, through the Profile Store's serialized writer (the v2.1 write-chain pattern, kept). This single rule prevents the classic failure where a feature "fixes itself" by editing the profile and corrupts every other feature.
+
+Where it lives (two-tier):
+
+RN app (canonical): everything on-device. AsyncStorage for small state is kept only for legacy keys; the ledger and profile move to SQLite (expo-sqlite) in P0 — AsyncStorage's read-all-write-all pattern cannot support 90-day append-only event volumes (reason documented in §10.3).
+Web port (this sandbox): LLM stages (intent parse, curation, enrichment) run server-side via API routes with the z-ai SDK; all behavioral memory stays client-side; every LLM stage has a documented offline fallback (§9.3, §10.4).
+5. L1 — The Event Ledger (Signal Telescope, industrial edition)
+5.1 What to include — the event taxonomy
+The ledger records every meaningful interaction. Nothing is "too small" — the research shows intelligence hides in small events (a seek-back, a skip at 4s vs 40s). Events are append-only, timestamped, and typed. The complete set:
+
+Event
+Fired when
+Key fields
+SESSION_START	app open after ≥30 min gap	ts, daypart block, weekday/weekend
+APP_BACKGROUND	app to background	session so-far duration
+TRACK_START	playback begins (any source)	trackId, artistId, duration, sourceSurface, queuePosition, sessionTrackIndex
+TRACK_HEARTBEAT	every 10s of playback	trackId, elapsedMs
+TRACK_SKIP	user-initiated next	trackId, elapsedMs, completionRatio, skipGrade (§5.2)
+TRACK_END	natural completion	completionRatio=1.0
+TRACK_SEEK	user scrubs	fromMs, toMs (backward seeks with target<current are replay-evidence)
+TRACK_LIKE / UNLIKE	heart toggle	trackId, artistId, sourceSurface (was it a rec when loved?)
+TRACK_DOWNLOAD	offline save	trackId
+QUEUE_ADD_MANUAL	user adds from menu	trackId, targetSurface
+QUEUE_REMOVE	user removes (esp. removes a rec → negative)	trackId, wasRecommended
+REC_EXPOSURE	a recommended track enters the visible queue (even if never reached)	trackId, surface, rankInPool, reasonCode
+SEARCH_QUERY	user searches	raw query (kept local only), resultCount
+SEARCH_CLICK	user opens a result	trackId, rankInResults
+PLAYLIST_SAVE_AI	AI playlist saved as-is	playlistId, promptHash
+AI_REGENERATE	user hit regenerate	promptHash, variantIndex
+NOT_FOR_ME	new menu action: explicit "this recommendation is wrong"	trackId, surface, reasonSlot
+STATION_ENDED	radio/autoplay stopped by user	tracksServed, avgListenRatio
+
+Why REC_EXPOSURE deserves existence: without it, the engine only learns from tracks users reached. A rec that sits at slot 9 and is never played is not evidence of failure — but a rec that was skipped twice after being exposed is. Exposure-eventing is what makes later metrics (skip@k per surface, §11.2) honest instead of survivorship-biased.
+
+Source surfaces (enumerate, never free-text): user_playlist · user_queue · search · chart · daily_mix_N · smart_shuffle_rec · radio · ai_playlist · daylist · discovery · onboarding.
+
+5.2 The graded Listen Score — skip position taxonomy
+Why: a skip is not a boolean. The skip study (§2.2-8) shows ~25% of skips happen under 5 seconds (reflex/context mismatch) and skips cluster at section boundaries (considered rejections). Treating all skips alike would poison the profile; treating them as nothing (today) wastes the strongest signal we have.
+
+How: on track end (skip or complete), compute completionRatio = listenedMs / durationMs from heartbeats (heartbeats make app-death mid-track safe). Grade into evidence:
+
+Grade
+Condition
+Evidence weight (artist)
+Meaning
+INSTANT_REJECT	skip <5s	−3.0	Wrong context more than wrong song — 60% blames the session, 40% the artist
+EARLY_SKIP	5–30s	−1.5	Gave the intro a chance; real mismatch
+MID_SKIP	30–75%	−0.5	Mild mismatch (chorus didn't land)
+LATE_SKIP	≥75%	+0.5	They stayed through the song's body
+COMPLETED	≥95% or natural end	+2.0	Success — the BaRT 30s bar generalized to full-duration grading
+REPLAY	completed/late + same track started again within 7d	+1.0 bonus	Among the strongest organic positives
+HEART	explicit like	+4.0	Strongest signal; decays slowest (§6.2)
+HEART_CONTRADICT	hearted track later instant-skipped ×2	heart weight collapses to +1.0	Explicit beats organic — resolve contradiction toward the explicit-but-recent
+DOWNLOAD	manual offline save	+2.5	Deliberate ownership intent
+NOT_FOR_ME	explicit negative button	−4.0 on track, −1.0 artist	Only explicit "never again" that blocks (§6.5)
+
+Evidence is distributed across four accounts with the grade's blame split: track account, artist account, genre/mood account (via Proxy Features), session account (§7). Example: INSTANT_REJECT on a high-energy rec during a night session → −3.0 splits: artist −1.2, track −1.2 (skip profile), mood/energy −0.6 ... session-vector "night" gets a −0.6 nudge against that energy level. The exact splits are tuning constants (Appendix C) with a stated protocol: replay tests must show energy-at-night corrections within 3 sessions.
+
+The per-track Skip Profile (from §2.2-8): the ledger accumulates, per track, a normalized histogram of skip positions in 10 buckets. Stable assets emerge: tracks whose bucket-1 (0–10%) density is high are "divisive openers" — the engine avoids placing them as track-1 of any generated sequence (they can open nobody's queue well but flourish mid-flow).
+
+5.3 Session reconstruction rules
+A session is the atomic unit of "the room." Reconstruct: SESSION_START on app open; a session ends after 30 minutes with no TRACK_START (tunable 20–45 min) or APP_BACKGROUND followed by 15 min inactive. Rules: heartbeats do not extend sessions (a paused app for an hour is still the same listening intent when resumed if <30 min); background service radio continues the session; sessionTrackIndex enables sequence analysis (what plays at position 1-3 vs 20+).
+
+5.4 Storage design, retention, caps
+SQLite tables: events(id, ts, type, payload_json) append-only; session(id, startTs, endTs, daypart, dayKind); per-layer aggregates in profile_* tables (rebuildable from events — the ledger is the source of truth, the profile is a cache that can always be rebuilt; this makes migrations trivial and bugs recoverable).
+Retention: raw events 90 days; sessions 180 days; aggregates forever. A nightly (first-open-of-day) compaction folds events older than 7 days into aggregates and deletes them.
+Caps and budgets: raw events ≤ ~20k rows typical (~2–4 MB); compaction guarantees bound. Full rebuild of profile from ledger must complete <3 s on a mid-range Android device (test on Moto G-class, not flagships).
+Write protocol: serialized async write chain (v2.1's pattern) — never concurrent writes; events are batched in memory and flushed on background/track-end to avoid I/O churn.
+5.5 Acceptance criteria (binary)
+Every event type in §5.1 fires with complete fields in a scripted 30-minute session (automated replay harness asserts presence and shape).
+Killing the app mid-track loses zero evidence — heartbeats reconstruct the partial listen on next boot.
+The five grades produce different downstream profile deltas (unit tests on the profile after each grade).
+A 90-day synthetic ledger (~20k events) compacts and rebuilds the full profile in <3 s.
+Privacy audit: the ledger contains no URLs, no network identifiers, no device IDs — track IDs and timestamps only (v2.1's sanitized-storage rule, inherited).
+6. L2 — The Taste Profile (the brain's memory)
+6.1 What it is
+What: a single living object — the profile — that answers, at any moment, "who is this listener?" It replaces v2.1's raw lists (recents 50 / playCounts 300 LRU / favorites 500) with decaying affinity maps across seven dimensions:
+
+Artist affinity — the workhorse. Map artistId → decaying weight, updated by every graded event.
+Genre affinity — map genre (normalized JioSaavn language/genre fields + our genre vocabulary) → decaying weight.
+Language affinity — Hindi, Punjabi, Tamil, Telugu, English, Bhojpuri, etc. Critical in our market; a Punjabi-pop phase should be visible and revertible.
+Era affinity — buckets: pre-80s, 80s, 90s, 2000s, 2010s, current. JioSaavn year fields are spotty; era is estimated per track at enrichment time (§6.4) with confidence.
+Mood/energy affinity — via the Proxy Feature Space: listener's preferred energy band and valence band, per daypart (next).
+Activity context — inferred labels (workout, focus, commute, sleep, party, bhakti, drive) derived from observed patterns: session length + energy arc + daypart + listen ratio. A label activates when its pattern fires repeatedly (e.g., 5 sessions ≥30 min of energy ≥0.75 before 9am → "morning workout" hypothesis strengthens). Labels are hypotheses with confidence, never hard rules.
+Daypart matrix — 5 blocks × {weekday, weekend} (next).
+Why: every failure in v2.1's surfaces traces to asking the raw lists questions they can't answer ("what does she listen to at night?", "what has she not heard?", "what is this session like?"). The profile is the single authority that can.
+
+6.2 Time-decay math (stated once, used everywhere)
+How: every affinity weight decays exponentially by age: w ← w · 0.5^(ageDays / halfLife). Half-lives (starting values, tunable): hearted relationships 180d, artist 45d, genre 60d, language 90d, era 120d, daypart cells 30d, per-track skip profile 180d. Rationale: taste drifts in weeks, identity drifts in months; a 3-day festival-devotional binge should visibly fade within ~2 weeks, while an artist the user hearts remains an anchor for ~6 months. Decay runs lazily at read time (effectiveWeight = stored · decay(ageAtRead)) — no timers, no background jobs, no battery cost; compaction (§5.4) persists the folded values.
+
+Normalization: raw maps are fat-tailed (one artist binged 200 plays drowns 40 gently-loved artists). At read time, weights are squashed: affinity = log(1 + w) / log(1 + maxW) → every dimension reports a 0–1 landscape that keeps the long tail visible. Popularity damping: a map entry's evidence is also divided by the artist's chart rank bucket (famous artists must earn 3× the weight of niche artists for the same affinity — the anti-hits-drowning-taste rule from aggregate-diversity research, §2.2-13).
+
+6.3 The daypart matrix — five blocks × two day-kinds
+What: matrix[block][dayKind] → {artistWeights, genreWeights, energyMean, energyStd, valenceMean, sessionCount}.
+
+Blocks (Heggli-verified structure, §2.2-11): morning · afternoon · evening · night · lateNight with default boundaries morning 05–11, afternoon 11–16, evening 16–20, night 20–24, lateNight 00–05 on weekdays; on weekends the boundaries shift later (morning 07–12, afternoon 12–17, evening 17–21, night 21–01, lateNight 01–07) — the verified workday/weekend asymmetry, not a guess.
+
+Personal calibration: block boundaries themselves are learned per user after 14 days: the user's own session-start histogram (when do they begin listening?) can shift each boundary ±90 min. A 4am factory-shift listener must not be forced onto a 9-to-5 clock. Until 14 days of data, population defaults hold; the Taste DNA screen shows the current boundaries and lets the user drag them.
+
+Why both artist weights and energy/valence moments: the block model needs two different answers — "who do I play at night?" (identity) and "how loud is night?" (vibe). The energy/valence moments power session-arc planning (§7.2) even when the artist weights are thin.
+
+6.4 The Proxy Feature Space ("Sonic Signal Synthesis")
+The honest problem: Spotify's third engine is raw-audio analysis (§2.1-6). A React Native app cannot tap the audio buffer without native modules, and JioSaavn offers no feature API. We will not fake audio science — we build a proxy space and document it as such:
+
+How each track gets estimated features — a three-source blend, stored with a confidence score:
+
+LLM cultural priors (bulk, cached, server-side in the web port; precomputed pack in the RN build): for each track/artist, the LLM estimates energy 0–1, valence 0–1, tempoClass ∈ {slow, mid, fast}, acoustic ∈ {acoustic, amplified, electronic}, era, language, moodTags[] from title/artist/film/cultural knowledge. Confidence: HIGH for famous tracks/artists, MEDIUM for film songs, LOW for obscure. This is cached per trackId forever (songs don't change) — a one-time enrichment, not a per-request cost.
+Metadata heuristics (on-device, instant): title/album keyword rules — "remix/EDM/bass boosted" ↑energy, "unplugged/lofi/acoustic/slowed+reverb" ↓energy, "sad/dukh/bewafa" ↓valence, "party/dance/club" ↑energy+valence, "bhajan/shabad/kirtan/aarti" → acoustic, high-valence-low-energy bhakti region. Cheap, explainable, confidence MEDIUM-LOW, applied when LLM prior is absent.
+Behavioral calibration (continuous, the secret weapon): observed outcomes pull the estimate. If a track with LLM-energy 0.85 keeps getting completed in night sessions and instant-skipped in morning ones, the effective energy for night drops toward the observed optimum. Every graded event nudges the track's effective feature vector toward "the context where it succeeds" — within bounds (±0.25 from prior, so one bad session can't flip a banger into a lullaby). Over hundreds of events, the profile self-corrects without any audio ever being analyzed.
+Why this is enough: our recommendation problem is within-listener ranking, not cross-user cold prediction. If the listener's 300-song world is consistently ordered by well-calibrated proxies, the surfaces feel right — and §11.2 measures exactly that (rec completion rate, skip@k). The optional P7 native module (real audio features via a lightweight on-device DSP pass over the first 30s of buffered audio) upgrades HIGH confidence to MEASURED — but P0–P6 ship without it.
+
+6.5 Taste clusters (the two-axis model)
+What: the profile collapses its richness into two orthogonal clusterings, because "Daily Mix" needs playlists you can name, not a vector dump:
+
+Axis 1 — Artist clusters: on the co-play graph (§7.3), run lightweight label propagation (3 iterations, no matrix libraries — this is 200 lines of TS). Produces 3–7 clusters, typically interpretable ("old Bollywood core", "Punjabi-pop party", "lofi night"). Rebuilt weekly or when graph changes >10%.
+Axis 2 — Mood clusters: k-means (k=4–6) over the user's listened tracks in Proxy-Feature space (energy × valence × tempoClass). Produces vibe cells ("high-energy happy", "low-energy melancholic" ...).
+How surfaces use it: Daily Mixes v2 sample from cluster crosses (artist-cluster × mood-cell) — this is what kills v2.1's single-artist mixes. Radio v2 uses artist clusters for drift control. Daylist picks the mood cell that dominates each block. Every cluster has a generated human name (LLM-named from its members, with a deterministic fallback).
+
+6.6 Explicit controls — Taste DNA (the transparency surface)
+What (beyond Spotify's beta, §2.1-3): a screen where the user sees the entire model and can act on it:
+
+Top artists/genres/languages/moods with visible weights (bars, not opaque percentages).
+Daypart view: "what the app thinks your 11pm sounds like" — the actual matrix cell contents.
+Per-item actions: Boost (×2 weight, one notch), Mute (never recommended, one tap in any track menu too), "You got me wrong" (opens a correction flow: pick the right genre/mood → writes corrective evidence, −2× the mis-attribution).
+Export: full profile + last-90d ledger as JSON to the user's files (their data, literally).
+Reset: one button, with a 1-line summary of what gets forgotten; re-runs onboarding (§9.9).
+Why: trust is the only moat a recommendation system that can't use cross-user data has. A user who can see the app remembering correctly will forgive a wrong pick; a user who can't see anything assumes the worst. This surface is also our debug UI — the critic (§14) uses it to verify learning claims.
+
+6.7 Cold start (before there is a profile)
+Onboarding Pick-5 (§9.9) seeds artist affinity at weight 3.0 each (≈6 hours of listening equivalent) — the profile is never empty.
+Chart-anchored defaults per language until first sessions land.
+First session runs exploration-heavy (ε=0.5, §8.3) — the bandit is the cold-start engine.
+Session 1–3 write session-account evidence preferentially (learn the daypart matrix fast) before touching artist weights (avoid first-day binges calcifying — the decay handles this too).
+6.8 Acceptance criteria (binary)
+Decay: a synthetic "binge then abstain" ledger shows the artist's effective weight halve within its half-life window (unit test, ±10%).
+Daypart: with 5+ sessions per block seeded, matrix cells return distinct artist sets per block (Jaccard <0.5 across blocks); 11pm never returns the 9am top-10.
+Proxy space: 100-track test pack shows ≥85% of LLM priors within ±0.2 of a human-labeled reference sheet (Appendix D includes the reference labels); behavioral calibration demonstrably pulls one deliberately mis-labeled track toward its observed context within 10 events.
+Clusters: on a 200-track synthetic co-play graph with 4 planted communities, label propagation recovers all 4 with ≥80% purity.
+Taste DNA: mute/boost/wrong each produce the documented change in the next Decision Engine query (integration test), and export validates as JSON Schema.
+7. L3 — The Session Brain (modeling the now)
+7.1 Session state vector
+What: while the ledger remembers across time, the Session Brain models this listening run. Its state is a sliding window over the last ≤12 graded listens with in-session recency weighting (the most recent 3 listens weigh 3×, the next 4 weigh 2×, the rest 1×). The state vector holds:
+
+sessionArtists / sessionGenres — recency-weighted sets (the "what room are we in" answer);
+energyTrajectory — the energy values of the window as an ordered series (for arc detection);
+skipStorm counter — instant-rejects within the last 6 tracks (for §7.2's storm state);
+completionRate — rolling fraction of the session's tracks that reached ≥95%;
+dedupSet — every track served this session + cross-session memory (last 100 radio/shuffle serves, 7-day TTL) so the engine never re-serves what it recently served.
+Why 12 and not more: beyond ~12 tracks the "room" has usually changed (people switch contexts); beyond ~45 min of listening the daypart matrix is the better authority. The window is the tie-breaker between the profile's long-term taste and the present moment — it must be small to stay honest.
+
+7.2 Vibe states (the room-reading state machine)
+What: the session is always in exactly one vibe state, recomputed on every track transition:
+
+State
+Enters when
+What the engine does
+WARMUP	session start, or after long pause	Gentle energy continuity; no extreme-energy tracks; favor trusted artists (exploitation-heavy)
+FLOW	completionRate ≥70% over last 4 tracks	Vibe-lock: pick next track with energy delta ≤0.2 from current, same mood cell; bias to co-play neighbors; this is where the app should feel unstoppable
+PEAK	energy ≥0.8 sustained 3+ tracks in FLOW	Hold energy band; avoid sudden valence drops (no heartbreak bangers mid-workout)
+WIND_DOWN	energy trajectory declining 3+ tracks, or lateNight block	Glide downward: each pick ≤ previous energy; pull daylist's block profile
+SKIP_STORM	3 instant-rejects within last 6 tracks	The emergency protocol (below)
+EXPLORING	user starts from Discovery/On the Rise, or ε slot fired	Novelty-friendly; exposure events tracked extra carefully
+
+The SKIP_STORM protocol (the "it's listening back" moment): 3 instant skips in 6 tracks means the engine has lost the room. Protocol: (1) freeze the current candidate pool — every artist/mood contributing to the storm is demoted in-session (not in the profile); (2) re-rank the next 2 slots from the opposite direction: the daypart matrix's block profile + the session's last completed track's neighbors (what they DID finish is the only truth in a storm); (3) widen energy tolerance, prefer instrumental/familiar artists (safe harbors); (4) surface a single-line, dismissible note: "Switching it up" (never blame the user, never interrogate); (5) if the storm continues 3 more tracks, stop interleaving recs entirely for the rest of the session — the app yields the floor to the user's own music. Silence, correctly timed, is intelligence.
+
+7.3 The co-play similarity graph (our ItemKNN, verified-cheap)
+What: the app's own track-to-track and artist-to-artist similarity structure, learned from adjacency: when track B starts within 90 seconds of track A ending (and both achieved ≥60s listens), edge A↔B += 1. Artist edges likewise. Same-source constraint: only edges within one session count (cross-session adjacency is noise).
+
+How it stays honest: edges decay (half-life 60d); edges are popularity-damped (w / (1 + log(playsA + playsB))) so chart giants don't absorb every neighborhood; graph caps at 5,000 strongest track-edges + 2,000 artist-edges. Retrieval at decision time: seed track → top-K neighbors (K=15) by damped weight, unioned with same-mood-cell and same-artist-cluster tracks. This is the neighborhood method the evaluation literature showed matches neural session models (§2.2-9) — ours is smaller-world but true: every edge is a thing this user actually did, which makes it undismissable evidence no catalog-wide model can offer.
+
+Why artist-level edges matter too: sparse track graphs cold-start badly; artist edges give every new track a lifeline through its artist's neighborhood.
+
+7.4 Acceptance criteria (binary)
+State machine: scripted sessions drive every transition including WARMUP→FLOW→PEAK→WIND_DOWN and SKIP_STORM entry/exit; states observable in a debug log.
+SKIP_STORM: after 3 instant-skips, the next 2 picks contain zero artists from the storm set, and energy direction follows the last completed track (replay test).
+Graph: on the synthetic 4-community corpus, seeded with a community-A track, ≥4 of top-5 neighbors are community-A (recall test, §11.1).
+Dedup: 2-hour scripted radio run re-serves zero tracks from the prior 7-day window.
+Vibe-lock: in FLOW, no consecutive pair has energy delta >0.2 (replay assertion).
+8. L4 — The Decision Engine (choose, explain, balance)
+8.1 What it is
+What: the single authority that turns "candidates" into "the next tracks" for every surface. Surfaces bring candidate pools (each pool has its own generation strategy, §9); the engine scores, orders, budgets exploration, attaches explanations, and enforces hygiene. Nothing anywhere in the app picks a track by raw score or gut feel again.
+
+8.2 Candidate pools (where candidates come from)
+Each surface composes its pool from up to five sources (weights per surface differ):
+
+Affinity pool — high-profile artists' top tracks (exploitation core).
+Neighborhood pool — co-play graph neighbors of current seeds (session-true).
+Daypart pool — the current matrix cell's artists/mood cell (time-true).
+Cultural pool — LLM-suggested "artists liked by fans of X" / genre-canonical tracks (our CF substitute; fetched at enrichment time, cached).
+Discovery pool — same-language adjacent-genre tracks + chart risers (novelty raw material).
+Pools are always ≥3× the requested output size, pre-filtered through the safety layer (§10.1) and hygiene rules (§8.4) before scoring — never let the scorer waste budget on unplayable/unsafe/already-served tracks.
+
+8.3 The scoring formula (in words, with the contract)
+Score = w₁·ProfileAffinity + w₂·SessionFit + w₃·DaypartFit + w₄·Freshness + w₅·SourceTrust + δ(explore) − Penalties
+
+ProfileAffinity — normalized artist/genre/mood affinity from L2 (the long-term "you").
+SessionFit — energy delta from current session energy (penalized quadratically beyond tolerance 0.2 — continuity is a soft law), artist overlap with session window (same artist ≤2 in any 6-slot horizon), mood-cell match.
+DaypartFit — how well the track's effective energy/valence sit inside the current block's observed band (±1σ), plus block-artist weights.
+Freshness — bonus for never-played-by-user tracks (novelty), penalty f(daysSinceLastServed, timesServedRecently) for over-served tracks (the anti-repeat spine: a track served twice in 7 days needs a w₃-magnitude justification to appear again); per-artist cap 4 per generated sequence (inherited from v2.1, kept).
+SourceTrust — per (surface → user) completion rate: if this user historically completes daylist tracks but skips radio recs, daylist-sourced candidates get a lift. Learned with an exponentially-weighted mean per surface (half-life 21d). This is our micro-BaRT reward model: reward = graded Listen Score, not just 30s.
+δ(explore) — the exploration arm (§8.4).
+Penalties — skip profile of the track (divisive-openers can't open; high bucket-1 density needs the mid-flow slot), NOT_FOR_ME block (hard), unplayable-URL history (hard), preview-only (−0.8 unless nothing else exists, inherited rule).
+Starting weights (tunable, full table Appendix C): w₁ 1.0, w₂ 1.2, w₃ 0.8, w₄ 0.6, w₅ 0.4, δ per §8.4. SessionFit outranks ProfileAffinity by design: reading the room beats knowing the person, in the moment.
+
+8.4 The exploration budget (risk-taking, on your behalf, with accounting)
+How: ε-greedy with context (the verified BaRT shape): a fraction ε of recommendation slots (not user slots — the user's own queued music is never touched) is spent on candidates the engine cannot justify with affinity, chosen for adjacent promise: same language, adjacent genre cluster, or LLM-cultural "fans-of-X" picks, always clean and non-preview.
+
+ε schedule: cold start (sessions 1–5) ε=0.5 → established ε=0.15, floored at 0.10 (never stop discovering); SKIP_STORM forces ε=0 for the rest of session (no experiments during a fire).
+Novelty accounting (the part most systems skip): every exploration slot is tagged; when the exposed track is later hearted/downloaded/completed in a new session, the discovery chain (which pool, which seed) gets credit. Discovery success rate is a first-class metric (§11.2) — if exploration isn't converting within 30 days, ε auto-drops 0.02/week (the budget is accountable, not decorative).
+Serendipity ladder: adjacent-genre first; cross-language at most 1 in 5 exploration slots (unless language affinity is flat); never unsafe, never preview-degraded when alternatives exist.
+8.5 Truthful explanations (the trust layer)
+How: every recommended track carries a reasonCode from this closed set, rendered as one human line — and each code is generated only from evidence that actually exists:
+
+Code
+Line (example)
+Truth condition (hard-coded)
+BECAUSE_PLAYED	"Because you played Arijit Singh a lot"	artist affinity top-10
+BECAUSE_HEARTED	"You loved this artist's 'X'"	a hearted track by same artist exists
+NEIGHBOR	"You keep playing this next to 'Y'"	co-play edge exists, weight above median
+FITS_BLOCK	"Fits your late-night sound"	daypart cell energy/valence match
+SESSION_CONTINUITY	"Keeps tonight's mood going"	session energy delta ≤0.2, same mood cell
+FRESH_FIND	"A fresh find — see if it sticks"	exploration slot, tag present
+FROM_YOUR_AI_MIX	"From the AI mix you saved"	playlist lineage exists
+BACK_FOR_MORE	"You replayed this last week"	replay event exists
+
+Banned forever: any social-proof phrasing ("others like you", "fans also") — we have no others, and fake social proof is the fastest way to lose the trust this whole architecture is buying. McInerney et al.'s insight (§2.1-4) is kept: we log which codes the user responds to (exposure → skip/complete) and learn per-user which explanations earn patience — explanation choice is itself a tiny bandit with 7 arms.
+
+8.6 The shelf bandit for Home (Deezer-style cascade)
+What: Home's shelves (Daily Mixes, Now Sound/daylist, Made for you, Jump back in, On the Rise, charts) are ordered per-session by a contextual bandit with cascade rewards (§2.1-5): reward flows to shelves above the first engagement (click/play) — the Deezer-verified model for exactly this UI.
+
+How: context = daypart block + day kind + session index; arms = shelves; delayed batch update at session end (no per-scroll writes); every stable shelf keeps a minimum show guarantee (appears ≥1 in 3 sessions) so exploration never hides the basics; new shelves enter as exploration arms with ε share. "Because you listened" style shelves are generated per session from the freshest seeds (they are cards, not fixed arms).
+
+8.7 Acceptance criteria (binary)
+Determinism: same (profile, session, block, seed) → same output order (hash-stable) — required for replay tests to mean anything.
+Every emitted rec passes the truth-condition check for its reasonCode (unit test over the full code table).
+ε schedule: scripted new-user logs show ε≥0.45 in session 1–3; a "mature" profile shows 0.10–0.15 ±0.02; SKIP_STORM session shows ε=0.
+Freshness: no track appears twice within any 7-day window across surfaces unless explicitly user-queued (replay assertion), and no artist >4 per generated sequence.
+Shelf bandit: scripted engagement with "Daily Mixes first" for 3 sessions → Daily Mixes rank rises to top-2 on session 4 (before/after log diff, B6).
+9. L5 — The Surfaces (where intelligence becomes visible)
+9.1 Smart Shuffle v2 — vibe-lock + queue healing
+What stays (verified against Spotify's spec, B1): the toggle cycles Off → Classic Shuffle → Smart; recs interleave into the upcoming queue only; sparkle badge; the original playlist is never mutated; for playlists >15 tracks the cadence is 1 rec per 3 tracks (v2.1 used 1 per 2 — we conform to the verified spec; for 6–15 track playlists, 1 rec per 3 with at most 2 total). Recs are drawn per-slot, not pre-decided, so every slot can react to what just happened.
+
+What changes — the selection brain:
+
+Per-slot Decision Engine call. Each rec slot asks the engine for one track with context = (current session window, daypart block, the playlist's own mood centroid, last 3 played). SessionFit and the playlist centroid dominate w₂/w₁ here.
+Vibe-lock: rec energy must sit within ±0.2 of the current session energy (not the playlist's average — the room's). If the playlist is a party list and the user has been skipping energy>0.8, the recs cool down even inside the party list.
+Queue healing (the signature moment): when a rec is skipped, the next rec slot is immediately re-seeded away from the skipped track's artist and mood-cell, drawn from the engine's runner-up pool — and the skip feeds the graded ledger live. Two consecutive rec-skips: cadence backs off 1:3 → 1:4 for the rest of the session and recs bias toward the playlist's own artists (the app yields; respect reads as intelligence). Saving/hearting a rec: the opposite — pool re-centers toward that artist instantly, cadence may tighten to 1:2 for the session (verified user delight pattern: "it added more like what I saved").
+Hygiene: never recommend a track played <24h, never a track the user removed from queue, never below SourceTrust floor for this surface, always clean (§10.1).
+Acceptance (B1): blind queue A/B vs the documented Spotify behavior on 3 fixed playlists; per-slot relevance scoring by fresh-context judge ≥ Spotify's documented behavior; healing assertions: skip → next slot differs in artist AND mood-cell; 2 skips → cadence 1:4 observable in queue.
+
+9.2 Autoplay Radio v2 — multi-seed, drift-controlled, dedup-aware
+What changes from v2.1 (single artist + title words):
+
+Multi-seed: seed = last non-rec played track (inherited) + its artist + session window + daypart cell. The radio starts true to the room, not just to the last artist.
+Drift control: every 5th slot is a drift track from the same artist-cluster (§6.5) but adjacent mood cell — labeled FRESH_FIND. Never drift twice consecutively; drift never crosses language unless language affinity is flat. This is how radio avoids the "same 20 songs" failure without whiplash.
+Dedup memory: the last 100 radio serves (7-day TTL) are a hard blocklist (§7.1 dedupSet). B7's 2-hour zero-repeat test is the gate.
+Endless + background: v2.1's PlaybackQueueEnded → extend logic stays (it's good engineering); extended 2 slots ahead while playing (prefetch), not on empty — removes the queue-end stall entirely.
+Explanations: every radio track carries NEIGHBOR / FITS_BLOCK / FRESH_FIND lines. Radio is where explanations earn their keep — users forgive radio misses they understand.
+Acceptance (B7): 2-hour scripted listen: zero 7-day repeats, ≥70% tracks within seed's genre/era cluster, drift ≤30% and always labeled, no stall on queue extension.
+
+9.3 AI Playlist Generator v2 — the flagship (five stages, one contract)
+This is the surface users judge "the AI" by. v2.1's single-mood/genre/era parser and popularity-scoring is demoted to the offline fallback. The v2 pipeline has five stages, each with a typed contract; the LLM is used where judgment beats rules (understanding, curation, naming) and never where retrieval truth beats judgment (song existence).
+
+S1 — UNDERSTAND (LLM, one call).
+Input: raw prompt (any language, any code-mix: "sad but hopeful 90s Hindi for a long drive, no remixes").
+Output: Intent JSON — {artists[], moods[], genres[], languages[], eras[], activities[], energyTarget 0–1, valenceTarget 0–1, tempoClass, negations[] ("no remixes"), durationMin?, mystery: creativityLevel 0–1, intentConfidence 0–1, detectedLanguage, curatorBrief (1 sentence)}.
+Rules: negations are first-class (a "no remixes" that survives to candidates is a P0 bug — test list includes 10 negation prompts); Hinglish/devanagari/code-mix robust (test list Appendix D); intentConfidence < 0.4 → at most ONE clarifying question with tappable options ("Party energy or late-night chill?") — never a form, never twice in a row.
+Fallback: heuristic parser (v2.1's, upgraded to multi-facet regex+dictionary) — the pipeline never hard-fails.
+
+S2 — HUNT (deterministic, parallel).
+The planner turns Intent into searches: per named artist (direct artist search), per mood×genre×language cell (keyword search), per era (decade search), plus LLM-cultural candidates — the S1 call also returns candidateNameHints[] (song/artist names the model believes fit; each is searched, never trusted). Fan-out ≤10 parallel searches × 20 results → dedupe (title|artist) → safety filter → playability probe (drop 404/preview where possible) → candidate pool 60–120 tracks with proxy features attached.
+
+S3 — CURATE (LLM, the ID-in/ID-out contract — Text2Tracks-honoring).
+Input: the pool as compact JSON lines (id, title, artist, year, language, energy, valence, tempoClass), the Intent, and the target count (25 default).
+Output: ordered track ID list + per-slot reason (≤8 words) + playlist name + description + arcPlan (intro/build/peak/land in energy terms).
+The contract (non-negotiable): every returned ID must exist in the input pool — anything else is a hallucination and is dropped silently; if valid count <15, re-ask ONCE with "choose only from the list" reinforcement; if still short, top-up from pool by engine score (deterministic) — the playlist always ships ≥18 tracks. The LLM may reorder and exclude; it may never invent.
+Why: this single contract converts LLM taste into catalog truth — the exact lesson of Text2Tracks (direct ID mapping, §2.1-7) adapted to our retrieval-based reality.
+
+S4 — POLISH (deterministic).
+Safety re-check (in case S2 cache was stale) → dedupe → artist cap 5 → no 3 consecutive same-artist → energy-arc smoothing against arcPlan (max step 0.25 between adjacent slots; activity presets from Appendix D — workout ramps up and holds, sleep descends, focus stays flat) → divisive-openers (skip-profile bucket-1 heavy, §5.2) banned from slot 1 → duration fit if requested.
+
+S5 — NARRATE (LLM, tiny, optional-offline).
+Name in the verified daylist pattern (descriptor + microgenre + context) with vernacular flavor: "Midnight Riyadh Drive", "Monsoon Ghazals & Chai", "Gym Desi Bass — No Mercy". Description: 1–2 sentences, curator voice, honest about its basis ("leans on your 90s love, ends soft for the drive home"). Regenerate button re-runs S3+S5 with temperature bump and variantIndex tag (AI_REGENERATE event) — the second variant must differ in ≥40% of tracks (else it's a fake choice).
+
+Cost & latency contract: S1 ≤1.5s, S3 ≤3s (pool pre-trimmed to ≤120 compact lines), S5 ≤1s, parallel where safe; total ≤6s typical vs v2.1's search-bound ~4s — the staged UI narrates honestly through stages (the v2.1 "thinking" UX is kept and fed real stage names). Every stage has a timeout + fallback: S1 fail → heuristic intent; S3 fail → engine-ranked pool (v2.1 behavior, now profile-aware); S5 fail → template name.
+
+Acceptance (B3): blind A/B vs v1 on the 20-prompt corpus (Appendix D) — intent-fit, arc, name, description, discovery quality; win ≥60% overall; 100% of negation and Hinglish prompts (v1 must fail some by construction); hallucination test: 0 invented IDs across 50 runs; every playlist ≥18 tracks.
+
+9.4 Daylist — "Now Sound" (time intelligence, shipped)
+What: the Heggli five-block × weekday/weekend model (§6.3) surfaced as a living playlist: on first play (or first app open) within a block, it (re)builds from the block's matrix cell + the session brain's continuity: 20–30 tracks, mostly trusted artists in the block's energy/valence band, 2–3 FRESH_FINDs. If the user re-enters later, it rebuilds (respecting dedup) — "updates multiple times a day" is the verified behavior we mirror. The header shows the generated name + "next shift" hint ("Shifts around 5pm"), exactly the daylist mechanic (§2.1-2).
+
+Why not just Daily Mixes with times: because the unit of taste is different — the daylist's authority is the block (time-shaped), while a Daily Mix's authority is the cluster (identity-shaped). Both exist; they answer different questions; users feel the difference even if they can't name it.
+
+Acceptance (B5): shadow-test at 08:00/14:00/19:00/23:00/02:30 weekday vs weekend on a seeded profile — five distinct surfaces (Jaccard <0.5), names vary by block, no 9am pool at 11pm.
+
+9.5 Daily Mixes v2 — two-axis + same-day drift
+What: 3–6 mixes built from cluster crosses (§6.5): each mix = one artist-cluster × one dominant mood-cell (the cross with the most listening weight), 25 tracks each: ~60% cluster core, ~25% cross-cluster bridges (cluster members' neighbors), ~15% FRESH_FIND. Naming per cluster-pair ("Punjabi Party Peak", "Old Gold Evenings").
+The v2.1 killer fixed: mixes are re-ranked nightly and after every 3rd session with same-day evidence — today's completions lift tonight's mix content within its cluster (drift within the mix's identity; the mix doesn't change species mid-day, it refreshes). Freshness rule: ≤30% of any mix may repeat from yesterday's same-numbered mix.
+Acceptance: after a scripted "new artist obsession day" (10 completions of artist X), tonight's mix contains X's tracks (2–4) without breaking cluster purity (≥70% cluster members).
+
+9.6 On the Rise — the discovery flagship (new surface)
+What: a weekly (rolling-7-day) 25-track playlist, the Discover Weekly analog, built ONLY from the user's own evidence: anchored by the "seed of the week" (the best-performing FRESH_FIND of the past week — highest completion of anything newly introduced), then: 70% adjacent-to-taste (neighborhood + cultural pools around the seed, adjacent genres/languages), 30% far-exploration (2 languages over, unknown clusters — honest adventure). Every track tagged with its discovery chain ("Found via your Arijit radio runs").
+Why weekly-and-anchored: pure novelty playlists feel random; pure affinity playlists feel stale. The seed-of-the-week mechanic gives each week a story ("last week the app found you one keeper — this week it hunted around it") and makes discovery accountable (§8.4's conversion metric reads this surface's outcomes directly).
+Acceptance: on a seeded profile, ≥60% of tracks are never-before-played; every track's chain resolves to a real pool/seed; skips here don't punish the artist profile beyond the graded weights (exploration must stay safe to fail).
+
+9.7 Your Sound / Stats — Wrapped-grade counting
+What: stats move to ledger-derived truth. The 30-second rule (industry-verified stream definition, §2.1-6 context) gates what counts as a "play" for all top-N lists. Surfaces: listening clock (daypart heat — "you're a 23:00 listener, top 8% night owl" style framing), weekday/weekend split, top artists/genres/languages/eras/moods with trend arrows vs previous 30d (rising/falling — the profile's decay makes this a read, not a compute), streaks (consecutive listening days, longest streak), skip-profile fun stats ("you skip 31% of intros — merciless" / "you finish 68% — loyal"), month-in-review cards, and a December Wrapped-style story (screens from ledger aggregates).
+Why it matters to intelligence (not vanity): stats are the visible proof the ledger exists. When the Stats screen matches lived experience, users trust the recommendations that same ledger powers. The stats surface is the intelligence system's public face.
+
+9.8 Vibe Search (NLP mode)
+What: search gains a mode toggle (Keyword | Vibe). Vibe mode routes the query through the S1 intent parser (same code path as AI playlists — one brain, two doors) and returns: best-match tracks (from catalog search + profile neighbors), "playlist this vibe" shortcut (pre-fills the AI generator), and "artists like X" rows. Keyword mode stays instant but gains typo tolerance (Levenshtein ≤2 against the artist/track index built from recent catalog touches) and Hinglish transliteration normalization ("arijit" ≈ "अरजित" ≈ "Arijit Singh").
+Acceptance: "songs like kun faya kun" returns Sufi-adjacent tracks + shortcut; "sahd songs" (typo) resolves to sad songs intent; zero latency regression on keyword mode.
+
+9.9 Onboarding — the first 30 minutes
+What: Pick-5 artist grid (charts by language tabs; "skip" allowed) → instant profile seeds (weight 3.0 each) → first Home already personalized (daypart pool + picks) → a quiet first-session: exploration-heavy ε=0.5 (the bandit learns fast), recs explained ("Fresh find — see if it sticks"), no notifications, no rating prompts. The 30-minute goal: by session end, the daypart matrix has 1 cell seeded, the profile has ≥10 artists, and the user saw ≥2 explanations that made sense. Cold-start honesty note: onboarding asks nothing else — no email, no permissions beyond playback.
+
+10. L6 — Cross-Cutting Trust Systems
+10.1 Safety & guardrails (inherited, extended)
+What stays: v2.1's two-layer filter (provider explicit flag + word-boundary blocklist over EN + romanized Hindi/Punjabi, compact-form stem dodging) gates every algorithmic surface; search badges "E" rather than filtering. This is a moat — nothing in this plan touches a track without it.
+
+What's added (verified gap G7): a transliteration-variant expansion pass: the blocklist compiles each term into character-class templates that catch leetspeak and phonetic dodge-spelling (digit-for-letter swaps, doubled letters, dropped vowels, @/4/3 substitutions — e.g. the pattern family of a g-word spelled g4nd/gandh/gan$d still matches). Templates are tested against a new variant corpus (Appendix D supplies the corpus spec: each blocked term × 12 documented dodge patterns), with a red-team rule: the corpus lives in tests, never shipped in app code. LLM-stage safety: S1/S3/S5 outputs pass the same filter (LLMs can suggest unsafe titles in candidateNameHints) — and the safety check runs on the final assembled queue once more, at the last moment before playback (defense in depth).
+
+10.2 Privacy architecture (the two-tier contract)
+RN app: 100% on-device. The ledger, profile, graphs: SQLite under app-sandbox storage. No network call carries behavioral data. Nothing leaves the phone, ever. Export/reset from Taste DNA (§6.6).
+Web port: the LLM stages (intent, curation, naming, enrichment) run server-side; the data that crosses the wire is prompts and catalog metadata (track IDs/titles/artists/features) — never the ledger or profile. Personalization signals reaching the LLM are aggregate-and-anonymized by construction (e.g., "listener's top energy band tonight: 0.6–0.8", not play histories). Offline mode: heuristic fallbacks run the same surfaces with reduced quality, visibly flagged ("offline brain").
+Enforcement: a unit test greps all network-layer code for ledger/profile table names — the classes that own them are simply not importable by the network layer (architecture-enforced privacy, not policy-enforced).
+10.3 Performance & storage budgets (mid-range Android is the target device)
+Budget
+Limit
+Enforcement
+Decision Engine query (post-candidates)	<150 ms p95	pure in-memory scoring; pools pre-filtered
+Profile read+decay (full)	<50 ms	lazy decay at read, precomputed decay factors per block read
+Co-play neighbor lookup	<20 ms	strongest-5k edges in memory map
+Ledger write (batched)	non-blocking, <10 ms amortized	write chain + flush points
+SQLite size (ledger+profile)	<8 MB steady state	90d retention + compaction
+AsyncStorage (legacy keys only)	unchanged from v2.1	migration moves heavy state to SQLite in P0
+App cold start delta from intelligence layer	<80 ms	profile loads async post-UI; surfaces render skeletons (v2.1 pattern)
+LLM playlist end-to-end	≤6 s typical, ≤10 s p95	staged timeouts + fallback ladder
+
+10.4 Failure modes & the fallback ladder (graceful degradation, always)
+Every layer degrades to the one below it — the app must never be dumber than v2.1, only ever smarter:
+
+Failure
+Degradation
+SQLite corrupted	rebuild profile from raw ledger; ledger unrecoverable → v2.1 lists still exist as legacy keys; surfaces run affinity-only mode
+Profile rebuild impossible	surfaces use v2.1's raw-list heuristics verbatim (the old engine is the permanent basement)
+LLM stage timeout/error	documented per-stage fallbacks (§9.3)
+Daypart matrix empty (new user)	population-default block profiles + exploration-heavy ε
+Co-play graph empty	neighborhood pool disabled; cultural pool + affinity carry ranking
+JioSaavn outage	iTunes fallback (inherited); recs prefer already-probed-playable cache
+SKIP_STORM never resolves	recs off for session — user's own music only (§7.2)
+
+Kill switches (user-facing, in Settings): Reset taste model · Disable all recommendations (classic-only shuffle) · Disable explanations · Disable exploration (ε=0). Power users get control; support gets tools.
+
+11. Evaluation Framework — prove it works, don't claim it
+11.1 Offline replay tests (the harness, before any UI)
+A replay harness feeds synthetic ledgers through each layer and asserts behavior. The synthetic corpus is scripted truth: sessions with known intents (workout arc, night chill, skip storms, obsession days, festival binge, cold start), ~20k events, 90 days. Each subsystem's acceptance criteria from §5–§9 are executable assertions in this harness. Gate: no surface code ships until its layer's replay suite passes. This is the gauntlet's offline half.
+
+11.2 Online metrics (with targets)
+Instrumented from REC_EXPOSURE events (survivorship-safe, §5.1). Baselines are measured from v2.1 behavior in the first two weeks of instrumentation — targets are relative to our own baseline, not made-up absolutes:
+
+Metric
+Definition
+Target
+skip@3 (recs)	fraction of recs skipped in first 3 slots of each surface	−25% vs v2.1 baseline
+rec completion rate	recs reaching ≥95%	+20% vs baseline
+save-per-rec	hearts ÷ exposed recs	≥8% (industry calibration: ~20–25% save rate drives algorithmic placement — we set our rec-specific bar at 8% as the honest floor)
+session length	median TRACK_STARTs per session	+10%
+7-day repeat rate	serves repeated within 7d (non-user-queued)	<1%
+diversity (ILS)	intra-list similarity of generated sequences (proxy-feature cosine)	≤0.75, and catalog coverage of recs ≥2× v2.1 within 30d
+exploration conversion	FRESH_FINDs completed/saved within 30d	≥10% (else ε auto-drops, §8.4)
+explanation trust	rate of "You got me wrong" corrections per 100 recs	<2 and falling
+
+Guardrail metrics (any breach pauses rollout): crash-free sessions (no delta), ANR rate, cold-start time, battery per listening hour, storage growth.
+
+11.3 The blind A/B gauntlet (the loop-closing half)
+Per §14: for each bar B1–B10, a fresh-context critic receives two unlabeled artifacts (ours vs the named bar's documented behavior/output) and must pick the winner + name the single biggest gap. Loops until ours wins blind. Never a fixed round count. The critic is never the builder, never sees this plan's claims — only outputs. Human in the loop where only humans can judge (names, descriptions, vibe): the user listens to 2 unlabeled mixes and picks; their pick is the ground truth that ends or continues the loop.
+
+12. Rollout Roadmap (dependency-ordered; each phase ships user value)
+Phase
+Ships
+Why this order
+Acceptance gate
+P0	Event Ledger (SQLite, all events, heartbeats, session reconstruction) + replay harness + v2.1 baselines measured	Everything learns from this; zero user-visible change; baselines make later claims honest	§5.5 all pass; baseline metrics recorded
+P1	Taste Profile + daypart matrix + Proxy Feature Space (enrichment pack) + migration of v2.1 lists	The brain before the behavior	§6.8 all pass; profile loads <80ms cold-start delta
+P2	Decision Engine + explanations + Smart Shuffle v2 (first visible win: skip a rec, feel the change)	Highest-emotion surface, fully powered by L1–L3	B1 blind win; §8.7 all pass
+P3	Co-play graph + Session Brain + Radio v2 + Daily Mixes v2	Session intelligence needs P2's engine; radio/mixes are its natural consumers	B7, B9 pass; §7.4, §9.2, §9.5 gates
+P4	AI Playlist v2 (5-stage LLM pipeline) + Vibe Search + negation/Hinglish corpus	The flagship, built last-but-one so it inherits everything	B3 blind win ≥60%; hallucination 0/50
+P5	Daylist + On the Rise + Your Sound v2 (30s rule, clock, streaks) + shelf bandit on Home	Time & discovery surfaces, plus the Home brain	B5, B6 pass; §9.4, §9.6, §9.7 gates
+P6	Onboarding (Pick-5) + Taste DNA transparency screen + kill switches + Wrapped story + polish	Trust and delight layer; completes the promise	B8 pass; §11.2 metrics green for 2 weeks
+P7 (optional research)	Native audio-feature module (real DSP features upgrade proxy confidence) + sequential SASRec-style mini-model if data volume justifies	Only if P0–P6 metrics show proxy-space ceilings	A/B: measurable rec-completion lift ≥5% before default-on
+
+Dependency law: no phase starts until the previous phase's gate passes. P0 has no dependencies and starts immediately.
+
+13. Risks & Pre-Mortem (written as if the project already failed — these are the autopsies we refuse to earn)
+"The ledger became a liability, not an asset" — symptoms: profile drifts into a 3-day binge echo chamber; user sees themselves caricatured. Prevention: decay half-lives (§6.2), binge-damping (evidence per artist per day capped at the equivalent of 8 listens), Taste DNA editability, and the §11.2 "correction rate" guardrail.
+"Skip learning overfit to reflexes" — symptoms: instant-skips of great songs poison artists; app gets timid. Prevention: the 60/40 session-vs-artist blame split on INSTANT_REJECT (§5.2), skip-position grading, and the exploration floor ε=0.10.
+"LLM playlists hallucinate" — symptoms: nonexistent tracks, wrong IDs. Prevention: ID-in/ID-out contract (§9.3-S3), silent-drop + top-up, 0/50 hallucination gate, never ship S3 without the contract test.
+"Explanations felt robotic or fake" — symptoms: users ignore reason lines, or worse, spot a lie. Prevention: closed truth-condition table (§8.5), banned social proof, human blind judgment on voice (B3/B8 loops).
+"The intelligence tax" — symptoms: battery, storage, cold-start regressions. Prevention: §10.3 budgets enforced in CI (perf tests on Moto G-class profile), lazy decay, batched writes, async profile load.
+"Two brains disagree" — symptoms: Smart Shuffle says party, daylist says sleep; user whiplash. Prevention: the data-flow contract (§4 one rule) — one Decision Engine, one truth; surfaces only choose pools, never scores.
+"Privacy leak by convenience" — symptoms: ledger data hits the network for "one feature". Prevention: architecture-enforced import ban (§10.2), grep CI test.
+"Phase 4 flagship slips and drags everything" — symptoms: LLM pipeline delays radio/mix wins. Prevention: the roadmap order makes the flagship P4 after two visible wins (P2, P3); the flagship depends on layers, not on hope.
+14. The Gauntlet Protocol for This Build (loop until blind-win)
+Set the bar per piece — from §3's table (Named + Fetchable + Comparable, with the comparison method written down before building).
+Split to smallest judgeable pieces — one subsystem (or one pipeline stage) per piece; "the AI playlist generator" is not a piece; "S3 curation with ID-contract on a fixed 100-track pool" is.
+Builder + independent critic. The builder builds; a separate agent with fresh context (no plan, no claims, no conversations) receives only the two unlabeled artifacts — ours and the bar's — and must: pick the winner, name the single biggest gap, never see labels.
+Blind A/B, labels stripped — for surfaces, side-by-side outputs on the same fixed inputs; for behaviors, before/after replay logs.
+Loop until ours wins blind — never a fixed round count; if the bar wins, the critic's "biggest gap" line becomes the next builder brief, verbatim.
+Human ground truth where machines can't judge — the user (or a recruited listener) picks between two unlabeled mixes/screens; their choice ends or continues the loop.
+Bars never downgrade. If a bar proves unreachable in one phase, the phase ships behind the bar with the gap documented — the bar stays on the board.
+15. Naming & Voice (for the surfaces, when built)
+Now Sound — the daylist surface ("your five tastes of day").
+On the Rise — the weekly discovery flagship.
+Taste DNA — the transparency/edit screen.
+TSF AI — the playlist generator (keep; it's branded).
+Not for me — the explicit negative action (track menu), never "dislike" (lighter weight, less accusatory).
+Reason lines speak like a good radio producer: short, warm, concrete, never defensive ("Keeps tonight's mood going" / "You replayed this last week" / "Fresh find — see if it sticks").
+Microgenre name bank for daylist/AI playlists (vernacular, evocative): midnight riyaz · monsoon ghazals · gym desi bass · Chandigarh drive · 3am tape · Bengaluru rain commute · shaam-e-ghazal · bass-boosted Akhada · lofi dargah · Filter Coffee Focus — generated by S5, seeded by this bank, always era/genre-true to the actual track list.
+16. Verified Sources (fetchable — the bar for every claim above)
+Smart Shuffle spec (official announcement, Spotify Community, Nov 2022) — community.spotify.com "Introducing Smart Shuffle!"; behavior corroborated: premierely.io/blog/smart-shuffle-spotify; newsroom launch coverage (Mar 2023).
+daylist — newsroom.spotify.com/2023-09-12/ever-changing-playlist-daylist-music-for-all-day; expansion: newsroom.spotify.com/2024-09-04.
+AI DJ — newsroom.spotify.com/2023-03-08/spotify-new-personalized-ai-dj-how-it-works; techcrunch.com/2023/02/22 (launch).
+AI Playlist — newsroom.spotify.com (Apr 7 2024, beta); support.spotify.com "Prompted Playlists"; techcrunch.com (Apr 7 2024): LLM intent + personalization tech.
+Taste Profile beta — newsroom.spotify.com/2026-03-13/taste-profile-beta-announcement.
+Discover Weekly three engines — Sophia Ciocca (Medium, 2017); aiinstitute.hbs.edu RCTOM submission (2018); tracknack.com explainer.
+BaRT — McInerney et al., "Explore, Exploit, and Explain: Personalizing Explainable Recommendations with Bandits", RecSys 2018 (research.atspotify.com/publications; dl.acm.org); dynamoi.com/learn/spotify-algorithm/what-is-spotify-bart-algorithm (30s reward, shelves/cards, epsilon-greedy context).
+Deezer carousel bandits — Bendada, Salha, Bontempelli, RecSys 2020 (arxiv.org/pdf/2009.06546; github.com/deezer/carousel_bandits); "Flow Moods" (dl.acm.org/doi/10.1145/3523227.3547378).
+Skip science — Montecchio, Roy, Pachet (Spotify), "The skipping behavior of users of music streaming services and its relation to musical structure", PLOS ONE 2020, PMC7526936 (quarter-of-streams-under-5s verified in text; skip profiles stable across time/regions; section-boundary clustering).
+WSDM 2019 Sequential Skip Prediction Challenge — aicrowd.com/challenges/spotify-sequential-skip-prediction-challenge; solution papers arxiv.org/abs/1901.08203, arXiv:1904.10273.
+GRU4Rec — Hidasi et al., ICLR 2016 (arxiv.org; github.com/hidasib/GRU4Rec); top-k gains: Hidasi & Czapp 2018; baseline competitiveness: "Evaluation of Session-based Recommendation Algorithms" + "Performance Comparison of Neural and Non-neural Approaches to Session-based Recommendation" (simple kNN matches/beats neural & GNN models).
+SASRec vs BERT4Rec — alphaxiv.org/abs/2309.07602 (SASRec consistently outperforms).
+Implicit feedback ALS — Hu, Koren, Volinsky 2008 (collaborative filtering for implicit feedback, confidence weighting); medium.com/radon-dev ALS explainer.
+Diurnal blocks — Heggli et al. 2021, Royal Society Open Science (pmc.ncbi.nlm.nih.gov/articles/PMC8580447): 5 blocks, workday/weekend boundary shift, chronotypes; 2B+ events.
+Circumplex emotion model — Russell 1980 lineage; Tran 2023 "Emotion-Aware Music Recommendation" (scholarship.depauw.edu); Griffiths 2021 multi-genre MER (tandfonline.com).
+Evaluation metrics — evidentlyai.com/ranking-metrics/evaluating-recommender-systems; "Diversity, Serendipity, Novelty, and Coverage" (Kamin-fraction); Jesse & Fessler 2023 ILS perception study (link.springer.com); ISMIR 2021 quantitative perceptions (archives.ismir.net/ismir2021/paper/000070).
+Text2Tracks — research.atspotify.com/2025/04/text2tracks-improving-prompt-based-music-recommendations; arxiv.org/html/2503.24193v2.
+Related Artists / co-listening — community.spotify.com staff answers (2015); vohnicmusic.com artist-similarity-graphs analysis.
+Engagement calibration — industry analyses (boost-collective.com save-vs-skip; chartlex.com skip-rate; orphiq.com skip/completion definitions): save rate ~20–25% correlates with algorithmic placement; 30-second stream rule context (support.spotify.com royalties pages).
+Competitor bars — Apple Music Discovery Station (techcrunch.com/2023/08/07); YouTube Music radio strength (eshop.macsales.com/blog/86430).
+Appendix A — Ledger event schema (contract-level)
+text
+
+Event        = { id: ULID, ts: ISO8601, type: EventType, sessionId: string,
+                 trackId?: string, artistId?: string, surface?: SourceSurface,
+                 payload: object }   // payload fields per §5.1 table
+ListenRecord = { trackId, sessionId, surface, startedTs, listenedMs, durationMs,
+                 completionRatio, grade: ListenGrade, skipBucket?: 1..10,
+                 wasRecommended: bool, reasonCode?: string }
+Session      = { id, startTs, endTs?, daypart: Block, dayKind: weekday|weekend,
+                 trackCount, totalListenMs }
+EventType    = SESSION_START | APP_BACKGROUND | TRACK_START | TRACK_HEARTBEAT |
+               TRACK_SKIP | TRACK_END | TRACK_SEEK | TRACK_LIKE | TRACK_UNLIKE |
+               TRACK_DOWNLOAD | QUEUE_ADD_MANUAL | QUEUE_REMOVE | REC_EXPOSURE |
+               SEARCH_QUERY | SEARCH_CLICK | PLAYLIST_SAVE_AI | AI_REGENERATE |
+               NOT_FOR_ME | STATION_ENDED
+Appendix B — Profile schema (contract-level)
+text
+
+TasteProfile = {
+  artists:  Map<artistId, {w, lastEventTs, evidenceCount, source: organic|heart|onboarding}>,
+  genres:   Map<genre, {w, lastEventTs}>,
+  languages:Map<lang, {w, lastEventTs}>,
+  eras:     Map<eraBucket, {w, lastEventTs}>,
+  proxy:    { energyPref: {mean, std}, valencePref: {mean, std}, tempoDist: {slow, mid, fast} },
+  daypart:  Map<[Block, dayKind], BlockCell>   // BlockCell per §6.3
+  activities: Map<ActivityLabel, {confidence, lastObservedTs}>,
+  skipProfiles: Map<trackId, {buckets[10], listens}>,
+  coplayTracks: Map<trackIdA, Map<trackIdB, w>>,   // top-5000
+  coplayArtists: Map<artistIdA, Map<artistIdB, w>>,// top-2000
+  clusters: { artistClusters: Cluster[], moodCells: MoodCell[] },
+  exploration: { epsilon, noveltyServed, noveltyConverted, lastScheduleTs },
+  corrections: { mutedArtists[], mutedTracks[], boosts[], wrongLabels[] },
+  boundaries: { weekday: Block[5], weekend: Block[5] }  // learned offsets
+}
+Appendix C — Starting weights & constants (single tuning table)
+text
+
+Listen grades        INSTANT −3.0 · EARLY −1.5 · MID −0.5 · LATE +0.5 · COMPLETE +2.0
+                     REPLAY +1.0 · HEART +4.0 · HEART_CONTRADICT collapse to +1.0
+                     DOWNLOAD +2.5 · NOT_FOR_ME −4.0/−1.0
+Grade blame split    INSTANT: 40% artist / 20% track / 20% mood / 20% session
+                     EARLY:   50% artist / 25% track / 25% mood
+                     MID–COMPLETE: 60% artist / 30% track / 10% mood
+Score weights        w1 ProfileAffinity 1.0 · w2 SessionFit 1.2 · w3 DaypartFit 0.8
+                     w4 Freshness 0.6 · w5 SourceTrust 0.4
+Half-lives (days)    heart 180 · artist 45 · genre 60 · language 90 · era 120
+                     daypart cell 30 · skip profile 180 · coplay edge 60 · sourceTrust 21
+Session              window 12 tracks · recency tiers 3×/2×/1× · storm = 3 instant in 6
+                     session gap 30 min · same-artist ≤2 per 6-slot horizon
+Cadence              Smart Shuffle 1:3 (>15 tracks) · heal backoff 1:4 · save tighten 1:2
+Exploration          ε: 0.5 (sessions 1–5) → 0.15 → floor 0.10 · cross-language ≤1 in 5
+                     conversion target 10%/30d · auto-drop 0.02/week if unmet
+Radio                drift 1 in 5 · dedup 100 tracks / 7 days · prefetch 2 ahead
+Mixes                3–6 mixes · 60/25/15 core/bridge/fresh · ≤30% repeat from yesterday
+AI Playlist          pool 60–120 · output 25 (min 18) · artist cap 5 · energy step ≤0.25
+Blocks (weekday)     morning 05–11 · afternoon 11–16 · evening 16–20 · night 20–24 · lateNight 00–05
+Blocks (weekend)     +2h shift per §6.3 · personal calibration ±90 min after day 14
+Appendix D — The Music-Domain Playbook (what a music person knows that a generic builder doesn't)
+D1. Activity energy arcs (used by S4 polish and Session Brain):
+
+Workout: ramp 0.6→0.85 over 3 tracks, hold ≥0.75, no ballads until explicit cooldown; BPM-class fast; avoid valence<0.3 (anger is usable, sadness is not).
+Focus/study: energy 0.3–0.5 flat (delta ≤0.1 between adjacent tracks — flatness matters more than level), instrumental-leaning, no tempoClass jumps.
+Sleep: 0.1–0.25, descending valence-neutrality, no drops, no prominent percussion; never a "fresh find" here (the one context where exploration is banned).
+Party: peak early (≤2 tracks), hold 0.8+, recognizable artists over novelty, language = the room's language (detect from recent hours).
+Commute morning: gentle lift curve 0.5→0.7; valence ≥0.4 (the day starts here).
+Night drive: 0.5–0.7 with mood freedom; the ONE context where melancholy + high energy coexists (verified Bollywood-drive canon).
+Bhakti/devotional: early-morning pattern common in our market; acoustic, valence ≥0.5, energy ≤0.5; never mixed with party clusters in one sequence.
+D2. Skip-window psychology: intros are where songs die (25% of all skips <5s, §2.2-8). Practical rules: never open a generated sequence with a divisive-opener profile track; when a session shows early-skip dominance, the pool's intro character (slow-build tracks) is demoted before its artists are — people skip slow intros, not slow artists, when the room wants momentum.
+
+D3. India-market specifics: film music is the spine (album/film context beats "artist albums" in search planning); eras are fandoms (50s–70s golden, 90s Kumar Sanu/Alka nostalgia is a block-scale phenomenon, 2000s Pritam/Vishal-Shekhar, current Arijit-led); regional waves (Punjabi pop's party dominance, Tamil/Telugu mass anthems, Bhojpuri's distinct lane); devotional dayparts; slowed+reverb/lofi remix culture for late night (proxy heuristics must catch "slowed", "lofi", "8d", "nightcore" title variants — and the negation "no remixes" must kill them all).
+
+D4. Mood taxonomy (mapped to valence × energy for the proxy space): happy (V .7 E .7) · euphoric (V .8 E .9) · romantic (V .6 E .45) · heartbreak (V .2 E .4) · melancholic (V .15 E .3) · nostalgic (V .5 E .4) · devotional (V .65 E .3) · meditative (V .5 E .15) · angry (V .2 E .9) · defiant (V .4 E .85) · trippy (V .55 E .75) · dreamy (V .5 E .25) · seductive (V .6 E .55) · triumphant (V .75 E .85) · bittersweet (V .4 E .35) · restless (V .35 E .7) · hopeful (V .65 E .5) · lonely (V .2 E .25) · celebratory (V .85 E .8) · brooding (V .25 E .5).
+
+D5. The 20-prompt blind-test corpus for B3 (fixed, labels stripped at judging): 1 "sad but hopeful 90s Hindi for a long drive" · 2 "gym motivators, new Punjabi, no K-pop" · 3 "chill study beats, English, no lyrics about love" · 4 "monsoon evening ghazals" · 5 "shaadi sangeet dance floor" · 6 "3am heartbreak, slowed + reverb" · 7 "morning bhakti, peaceful start" · 8 "Tamil mass anthems for the gym" · 9 "90s Bollywood but only the deep cuts" · 10 "focus like a Bengaluru coffee shop" · 11 "Arijit but only the underrated ones" · 12 "party hits but no remixes" · 13 "sleep, piano, rain" · 14 "road trip with friends, mixed languages" · 15 "heartbreak but make it defiant" · 16 "old Punjabi classics, pre-2010" · 17 "instrumental lofi for late-night coding" · 18 "wedding entrance song for the groom's side" · 19 "songs that feel like coming home after a long day" · 20 "Monday motivation, no cheese".
+
+D6. Safety variant corpus spec (B10): each blocked term × 12 dodge patterns (leetspeak digit-swap, vowel-drop, doubled consonant, @/4/3/$ substitution, hyphen/underscore/dot insertion, phonetic spelling, split-across-words, unicode lookalikes, spaced caps, reverse, repetition, prefix-suffix contamination). Corpus lives in the test suite only.
+
+End of plan. Builder: start at P0. The Prime Directive is the review lens for every PR: does this change make the app feel like it is listening back — reactively, memorably, honestly?

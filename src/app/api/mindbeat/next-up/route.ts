@@ -20,6 +20,10 @@ export const maxDuration = 30
  *   exclude: string[]                                       (videoIds)
  *   session?: { recent: { videoId, artistName?, energy? }[],
  *               completionRate?, skipStormCount? }          (client payload)
+ *   flags?:  { recsOff?: boolean, noExplore?: boolean, noReasons?: boolean }
+ *            (device kill switches from surfaceFlags() — the device owns
+ *             them; the server never reads localStorage. recsOff answers
+ *             immediately with an empty pick set; noExplore zeroes ε.)
  * }
  *
  * → { picks: EnginePick[], vibe: VibeState, epsilon: number }
@@ -40,10 +44,28 @@ interface NextUpBody {
   count?: number
   surface?: string
   exclude?: string[]
+  flags?: {
+    recsOff?: boolean
+    noExplore?: boolean
+    noReasons?: boolean
+  }
   session?: {
     recent?: { videoId?: string; artistName?: string; energy?: number }[]
     completionRate?: number
     skipStormCount?: number
+  }
+}
+
+/** Manual parse with defaults — an absent/garbled flags object means all-off. */
+function parseFlags(raw: NextUpBody['flags']): {
+  recsOff: boolean
+  noExplore: boolean
+  noReasons: boolean
+} {
+  return {
+    recsOff: raw?.recsOff === true,
+    noExplore: raw?.noExplore === true,
+    noReasons: raw?.noReasons === true,
   }
 }
 
@@ -61,6 +83,13 @@ export async function POST(req: NextRequest) {
     ? (body.surface as SourceSurface)
     : 'smart_shuffle_rec'
   const excludeBody = Array.isArray(body.exclude) ? body.exclude.filter((v) => typeof v === 'string') : []
+  const flags = parseFlags(body.flags)
+
+  // KILL SWITCH (plan §10.4): 'tsf-mindbeat-off' → recommendations are OFF.
+  // Zero picks, no pools, no engine call — classic shuffle is the only source.
+  if (flags.recsOff) {
+    return Response.json({ picks: [], vibe: 'OFF', epsilon: 0 })
+  }
 
   try {
     const [profile, sessionCtx] = await Promise.all([compileProfile(), getSessionContext()])
@@ -151,11 +180,17 @@ export async function POST(req: NextRequest) {
         sessionEnergy,
         energies: clientEnergies,
         neighborAnchors: seeds.map((s) => ({ videoId: s.videoId, ...(s.title ? { title: s.title } : {}) })),
+        exploreOff: flags.noExplore,
       },
     })
 
     const vibe = computeVibe(mergedSession, { energies: clientEnergies, surface })
-    const epsilon = vibe === 'SKIP_STORM' ? EPSILON.storm : profile.exploration.epsilon
+    // report the EFFECTIVE budget: noExplore zeroes ε exactly as decide() saw it
+    const epsilon = flags.noExplore
+      ? 0
+      : vibe === 'SKIP_STORM'
+        ? EPSILON.storm
+        : profile.exploration.epsilon
 
     return Response.json({ picks, vibe, epsilon })
   } catch (e) {
