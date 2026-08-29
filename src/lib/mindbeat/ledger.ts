@@ -26,6 +26,7 @@ import {
   SKIP_STORM_WINDOW,
   SOURCE_SURFACES,
   currentDaypart,
+  type EventType,
   type LedgerEventIn,
   type ListenGrade,
   type ListenRecord,
@@ -395,6 +396,8 @@ interface OpenListen {
   artistName?: string
   sessionId: string
   surface?: SourceSurface
+  /** Home shelf that served this listen (TRACK_START payload.shelfId). */
+  shelfId?: string
   startedTs: number
   durationMs: number
   wasRecommended: boolean
@@ -407,6 +410,7 @@ interface ClosedListen {
   artistName?: string
   sessionId: string
   surface?: SourceSurface
+  shelfId?: string
   startedTs: number
   durationMs: number
   listenedMs: number | null
@@ -430,6 +434,7 @@ function closeFromOpen(
     artistName: cur.artistName,
     sessionId: cur.sessionId,
     surface: cur.surface,
+    shelfId: cur.shelfId,
     startedTs: cur.startedTs,
     durationMs: close.durationMs ?? cur.durationMs,
     listenedMs: listened,
@@ -471,6 +476,7 @@ export async function reconstructListens(events: LedgerEvent[]): Promise<ListenR
           (str(payload.surface) && (VALID_SURFACES as readonly string[]).includes(str(payload.surface)!)
             ? (str(payload.surface) as SourceSurface)
             : undefined),
+        shelfId: str(payload.shelfId),
         startedTs: ev.ts.getTime(),
         durationMs: num(payload.durationMs) ?? 0,
         wasRecommended: payload.wasRecommended === true,
@@ -558,6 +564,7 @@ export async function reconstructListens(events: LedgerEvent[]): Promise<ListenR
       artistName: c.artistName,
       sessionId: c.sessionId,
       surface: c.surface,
+      shelfId: c.shelfId,
       startedTs: new Date(c.startedTs).toISOString(),
       listenedMs,
       durationMs,
@@ -579,6 +586,49 @@ export async function getRecentListens(limitMs = 90 * DAY_MS): Promise<ListenRec
     .catch(() => [])
   events.reverse()
   return reconstructListens(events)
+}
+
+// ---------------------------------------------------------------------------
+// Raw typed reads (shelf-bandit + telemetry aggregators)
+// ---------------------------------------------------------------------------
+
+/** Minimal raw ledger row for event-type aggregations (read-only). */
+export interface RawLedgerRow {
+  id: string
+  ts: Date
+  sessionId: string
+  trackId?: string
+  surface?: SourceSurface
+  payload: Record<string, unknown>
+}
+
+/**
+ * Read raw ledger events of ONE type within a time window. Read-only —
+ * used by aggregators (shelf bandit) that need fields reconstruction drops
+ * (e.g. SHELF_EXPOSURE rows carry no trackId at all).
+ */
+export async function getRecentEventsByType(
+  type: EventType,
+  limitMs = 14 * DAY_MS,
+  take = 2000
+): Promise<RawLedgerRow[]> {
+  const since = new Date(Date.now() - limitMs)
+  const rows = await db.ledgerEvent
+    .findMany({
+      where: { type, ts: { gte: since } },
+      orderBy: { ts: 'desc' },
+      take,
+      select: { id: true, ts: true, sessionId: true, trackId: true, surface: true, payload: true },
+    })
+    .catch(() => [])
+  return rows.map((r) => ({
+    id: r.id,
+    ts: r.ts,
+    sessionId: r.sessionId,
+    trackId: r.trackId ?? undefined,
+    surface: (r.surface ?? undefined) as SourceSurface | undefined,
+    payload: parsePayload(r.payload),
+  }))
 }
 
 // ---------------------------------------------------------------------------

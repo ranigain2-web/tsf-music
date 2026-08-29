@@ -63,6 +63,28 @@ export function isEnabled(): boolean {
   }
 }
 
+/**
+ * The three user-facing kill switches (plan §10.4), persisted by TasteDNA.
+ * Rec surfaces read these per request — cheap, dependency-free, never cached
+ * at module level (the user can flip them any moment; the next request
+ * honors it).
+ *   recsOff    'tsf-mindbeat-off'      === 'on'  → no recommendations at all
+ *   noExplore  'tsf-mindbeat-noexplore'=== 'on'  → ε forced to 0 (no FRESH_FIND)
+ *   noReasons  'tsf-mindbeat-reasons'  === 'off' → explanation lines suppressed
+ */
+export function surfaceFlags(): { recsOff: boolean; noExplore: boolean; noReasons: boolean } {
+  if (typeof window === 'undefined') return { recsOff: false, noExplore: false, noReasons: false }
+  try {
+    return {
+      recsOff: localStorage.getItem('tsf-mindbeat-off') === 'on',
+      noExplore: localStorage.getItem('tsf-mindbeat-noexplore') === 'on',
+      noReasons: localStorage.getItem('tsf-mindbeat-reasons') === 'off',
+    }
+  } catch {
+    return { recsOff: false, noExplore: false, noReasons: false }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // ULID (tiny monotonic implementation — Crockford base32)
 // ---------------------------------------------------------------------------
@@ -243,6 +265,8 @@ export interface PlaybackContext {
   surface: SourceSurface
   wasRecommended: boolean
   reasonCode?: ReasonCode
+  /** Home shelf that served the track (shelf-bandit attribution, task 15-c). */
+  shelfId?: string
 }
 
 let playCtx: PlaybackContext = { surface: 'user_queue', wasRecommended: false }
@@ -253,6 +277,7 @@ export function setPlaybackContext(ctx: Partial<PlaybackContext>): void {
     surface: ctx.surface ?? playCtx.surface,
     wasRecommended: ctx.wasRecommended ?? playCtx.wasRecommended,
     reasonCode: ctx.reasonCode ?? playCtx.reasonCode,
+    shelfId: ctx.shelfId ?? playCtx.shelfId,
   }
 }
 
@@ -264,6 +289,8 @@ export function getPlaybackContext(): PlaybackContext {
 interface QueueSourceStamp {
   surface: SourceSurface
   reasonCode?: ReasonCode
+  /** Home shelf that served the track (shelf bandit attribution). */
+  shelfId?: string
   ts: number
 }
 const queueSources = new Map<string, QueueSourceStamp>()
@@ -280,20 +307,22 @@ function freshQueueSource(videoId: string): QueueSourceStamp | null {
 
 /**
  * Marks tracks as having been EXPOSED by a recommendation surface
- * (AI playlist open, Smart Shuffle application, …). trackStart resolves
- * these stamps so TRACK_START/TRACK_END carry surface + wasRecommended +
- * reasonCode without threading props. TTL 24h, cap 500 (oldest evicted).
+ * (AI playlist open, Smart Shuffle application, home shelf render, …).
+ * trackStart resolves these stamps so TRACK_START/TRACK_END carry surface +
+ * wasRecommended + reasonCode (+ shelfId) without threading props.
+ * TTL 24h, cap 500 (oldest evicted).
  */
 export function markQueueSource(
   tracks: Array<{ videoId?: string } | null | undefined>,
   surface: SourceSurface,
-  reasonCode?: ReasonCode
+  reasonCode?: ReasonCode,
+  shelfId?: string
 ): void {
   if (typeof window === 'undefined') return
   const now = Date.now()
   for (const t of tracks) {
     if (!t || !t.videoId) continue
-    queueSources.set(t.videoId, { surface, reasonCode, ts: now })
+    queueSources.set(t.videoId, { surface, reasonCode, shelfId, ts: now })
   }
   while (queueSources.size > QS_CAP) {
     const oldest = queueSources.keys().next().value
@@ -391,6 +420,8 @@ export interface TrackStartOpts {
   queuePosition?: number
   wasRecommended?: boolean
   reasonCode?: ReasonCode
+  /** Home shelf that served this track (SHELF bandit attribution). */
+  shelfId?: string
   duration?: number // seconds
 }
 
@@ -405,6 +436,7 @@ export function trackStart(track: TrackStartInfo, opts: TrackStartOpts): LedgerE
         queuePosition: opts.queuePosition,
         wasRecommended: opts.wasRecommended ?? false,
         reasonCode: opts.reasonCode,
+        shelfId: opts.shelfId,
         durationSec:
           opts.duration && isFinite(opts.duration) && opts.duration > 0
             ? Math.round(opts.duration)
@@ -432,6 +464,8 @@ export interface TrackEndOpts {
   wasRecommended?: boolean
   reasonCode?: ReasonCode
   surface?: SourceSurface
+  /** Home shelf that served this track (carried over from its TRACK_START). */
+  shelfId?: string
 }
 
 /**
@@ -458,6 +492,7 @@ export function trackEnd(trackId: string, opts: TrackEndOpts & { forceType?: 'TR
         skipBucket: opts.skipBucket ?? skipBucketOf(ratio),
         wasRecommended: opts.wasRecommended ?? false,
         reasonCode: opts.reasonCode,
+        shelfId: opts.shelfId,
       },
     })
   )
@@ -510,6 +545,22 @@ export function recExposure(
 ): LedgerEventIn {
   return enqueue(
     buildEvent('REC_EXPOSURE', { trackId, surface, payload: { rankInPool, reasonCode } })
+  )
+}
+
+/**
+ * SHELF-level exposure (task 15-c — the Home shelf bandit's attention signal).
+ * Fired ONCE per shelf per Home open (one batched enqueue per open, never per
+ * scroll frame). Carries the shelf's stable id + render position + how many
+ * tracks it held, so the bandit can compute per-shelf start/save rates against
+ * real attention. The shelf's track plays attribute via markQueueSource stamps
+ * (payload.shelfId on TRACK_START/TRACK_END) — this event is the DENOMINATOR.
+ */
+export function shelfExposure(shelfId: string, position: number, trackCount?: number): LedgerEventIn {
+  return enqueue(
+    buildEvent('SHELF_EXPOSURE', {
+      payload: { shelfId, position, trackCount: trackCount && trackCount > 0 ? trackCount : undefined },
+    })
   )
 }
 

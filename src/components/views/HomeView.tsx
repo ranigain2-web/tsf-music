@@ -17,12 +17,14 @@
  * the user's onboarding selections.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Play, Sparkles, Wand2, Compass, Satellite, AlarmClock, Repeat2, Mic2, BookOpenText, type LucideIcon } from 'lucide-react'
 import { usePlayer, type PlayerTrack } from '@/store/player'
 import { api, useNav } from '@/store/nav'
 import { useLibrary } from '@/store/library'
 import { usePreferences } from '@/store/preferences'
+import { markQueueSource, shelfExposure } from '@/lib/mindbeat/client'
+import type { SourceSurface } from '@/lib/mindbeat/types'
 import { Shelf, AlbumCard, ArtistCard } from '@/components/shared'
 import { Artwork } from '@/components/Artwork'
 import { AiPlaylistGenerator } from '@/components/ai/AiPlaylistGenerator'
@@ -41,12 +43,14 @@ interface DailyMix {
 }
 
 interface AiHome {
-  shelves: YtmShelf[]
+  shelves: (YtmShelf & { id?: string })[]
   mixes: DailyMix[]
   topArtists: { id: string; name: string; thumbnail?: string }[]
   greeting: string
   name?: string
   needsOnboarding?: boolean
+  /** Shelf-bandit transparency (task 15-c): live = a champion earned the top slot. */
+  bandit?: { mode: 'live' | 'cold'; champion?: string; dayBucket: number }
 }
 
 interface FeaturedCard {
@@ -81,6 +85,25 @@ const FEATURED_ICONS: Record<string, React.ReactNode> = {
   Satellite: <Satellite size={46} className="text-white/85" strokeWidth={1.5} />,
   AlarmClock: <AlarmClock size={46} className="text-white/85" strokeWidth={1.5} />,
   Repeat2: <Repeat2 size={46} className="text-white/85" strokeWidth={1.5} />,
+}
+
+/**
+ * Shelf-bandit telemetry (task 15-c): the rec surface a shelf's track plays
+ * attribute to. Shelves without a mapping ('top-artists', 'more-like-*',
+ * 'albums-*') have no direct track plays from the shelf itself.
+ */
+function shelfSurfaceForId(id: string): SourceSurface | null {
+  if (id === 'now-sound') return 'daylist'
+  if (id === 'on-the-rise') return 'discovery'
+  if (id.startsWith('daily-mix-')) return 'daily_mix'
+  if (id.startsWith('genre-')) return 'ai_playlist'
+  if (id.startsWith('artist-top-')) return 'artist'
+  return null
+}
+
+/** Daily Mix card ids (dm-N) → the bandit's daily-mix-N shelf id space. */
+function mixShelfId(mixId: string): string {
+  return mixId.startsWith('dm-') ? `daily-mix-${mixId.slice(3)}` : mixId
 }
 
 export function HomeView() {
@@ -147,6 +170,48 @@ export function HomeView() {
     return () => { cancelled = true }
   }, [])
 
+  // MINDBEAT: stamp the shelves' tracks so plays attribute to the right rec
+  // surface AND the shelf that served them (markQueueSource … shelfId →
+  // payload.shelfId on TRACK_START/TRACK_END = the shelf bandit's starts).
+  // Re-stamped on every data arrival — stamps are TTL/cap-evicted client state.
+  useEffect(() => {
+    const shelves = data?.shelves
+    const mixes = data?.mixes
+    if (!shelves?.length && !mixes?.length) return
+    try {
+      for (const shelf of shelves ?? []) {
+        if (!shelf.id || !shelf.tracks?.length) continue
+        const surface = shelfSurfaceForId(shelf.id)
+        if (surface) markQueueSource(shelf.tracks as PlayerTrack[], surface, undefined, shelf.id)
+      }
+      for (const mix of mixes ?? []) {
+        if (!mix.tracks?.length) continue
+        markQueueSource(mix.tracks as PlayerTrack[], 'daily_mix', undefined, mixShelfId(mix.id))
+      }
+    } catch { /* instrumentation only */ }
+  }, [data])
+
+  // MINDBEAT shelf bandit: SHELF_EXPOSURE once per shelf per Home open — the
+  // attention denominator the bandit scores starts/saves against. ONE batched
+  // enqueue per open (ref-guarded; the snapshot→network data swap must not
+  // double-fire), never per scroll frame.
+  const shelfExposedRef = useRef(false)
+  useEffect(() => {
+    if (shelfExposedRef.current) return
+    const shelves = data?.shelves
+    if (!shelves?.length) return
+    shelfExposedRef.current = true
+    try {
+      shelves.forEach((shelf, position) => {
+        if (!shelf.id) return
+        shelfExposure(shelf.id, position, shelf.tracks?.length ?? 0)
+      })
+      ;(data?.mixes || []).forEach((mix, position) => {
+        shelfExposure(mixShelfId(mix.id), position, mix.tracks?.length ?? 0)
+      })
+    } catch { /* telemetry only */ }
+  }, [data])
+
   // Fallback quick picks from user's first favorite artist
   const [fallbackPicks, setFallbackPicks] = useState<HistoryTrack[]>([])
   useEffect(() => {
@@ -180,6 +245,11 @@ export function HomeView() {
   const greeting = data?.greeting || 'Good evening'
   const name = data?.name || prefs.name
   const heading = name ? `${greeting}, ${name}` : greeting
+
+  // Shelf-bandit transparency: the champion shelf's subtitle gains a subtle
+  // '· rising' suffix — render-time only, never persisted into the snapshot.
+  const bandit = data?.bandit
+  const championId = bandit?.mode === 'live' ? bandit.champion : undefined
 
   // Spotify 2023+ home anatomy (BAR-B §2.2): filter chips Music / Podcasts /
   // Audiobooks. TSF is music-only — non-music tabs get an honest empty state.
@@ -378,9 +448,18 @@ export function HomeView() {
         </div>
       )}
 
-      {/* personalized shelves from /api/ai/home */}
-      {!loading && shelves.map((shelf) => (
-        <Shelf key={shelf.title} title={shelf.title} subtitle={shelf.subtitle}>
+      {/* personalized shelves from /api/ai/home (bandit order) */}
+      {!loading && shelves.map((shelf) => {
+        const isChampion = !!championId && !!shelf.id && shelf.id === championId
+        // champion transparency: '· rising' appended in the existing muted
+        // style (a subtitle-less shelf — e.g. genre rows — shows just 'rising')
+        const subtitle = !isChampion
+          ? shelf.subtitle
+          : shelf.subtitle && !shelf.subtitle.includes('· rising')
+            ? `${shelf.subtitle} · rising`
+            : 'rising'
+        return (
+        <Shelf key={shelf.title} title={shelf.title} subtitle={subtitle}>
           {shelf.albums?.map((a) => (
             <AlbumCard
               key={a.browseId}
@@ -402,6 +481,7 @@ export function HomeView() {
               index={i}
               list={shelf.tracks as PlayerTrack[]}
               context={shelf.title}
+              subline={shelf.id === 'on-the-rise' ? (t as PlayerTrack & { chain?: string }).chain : undefined}
             />
           ))}
           {shelf.artists?.map((ar) => (
@@ -414,7 +494,8 @@ export function HomeView() {
             />
           ))}
         </Shelf>
-      ))}
+        )
+      })}
 
       {/* needs onboarding */}
       {!loading && data?.needsOnboarding && (
@@ -561,11 +642,14 @@ function TrackChip({
   index,
   list,
   context,
+  subline,
 }: {
   track: PlayerTrack
   index: number
   list: PlayerTrack[]
   context?: string
+  /** overrides the artist line — used to surface discovery chains */
+  subline?: string
 }) {
   const playQueue = usePlayer((s) => s.playQueue)
   return (
@@ -593,7 +677,7 @@ function TrackChip({
         </button>
       </div>
       <div className="text-base font-normal text-white truncate">{track.title}</div>
-      <div className="text-[13px] text-[#a7a7a7] truncate mt-0.5">{track.artistName}</div>
+      <div className="text-[13px] text-[#a7a7a7] truncate mt-0.5">{subline || track.artistName}</div>
     </div>
   )
 }

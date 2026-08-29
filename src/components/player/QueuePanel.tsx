@@ -22,6 +22,7 @@ import { useRef, useState } from 'react'
 import { X, GripVertical, Trash2, Music4, Sparkles } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { usePlayer, type PlayerTrack } from '@/store/player'
+import { surfaceFlags } from '@/lib/mindbeat/client'
 import {
   DndContext,
   closestCenter,
@@ -55,6 +56,9 @@ function SortableRow({
 }) {
   const [armed, setArmed] = useState(false) // true while the red reveal shows
   const didDrag = useRef(false) // suppress the click that follows a swipe
+  // KILL SWITCH (plan §10.4): explanations off → the Sparkles badge (which
+  // exists purely to carry the reason line) is hidden entirely.
+  const showReasonBadge = !!track.__rec && !surfaceFlags().noReasons
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: track.videoId + '-' + realIdx,
     disabled: false,
@@ -143,7 +147,7 @@ function SortableRow({
         <div className="min-w-0 flex-1">
           <div className="text-sm truncate text-white flex items-center gap-1.5">
             <span className="truncate">{track.title}</span>
-            {track.__rec && (
+            {showReasonBadge && (
               <span title={track.__reason || 'Smart shuffle pick'} className="shrink-0 inline-flex">
                 <Sparkles size={12} className="text-[#1ed760]" aria-label="Smart shuffle pick" />
               </span>
@@ -183,6 +187,9 @@ export function QueuePanel() {
   const current = queue[queueIndex]
   const upcoming = queue.slice(queueIndex + 1)
   const upcomingIds = upcoming.map((t, i) => t.videoId + '-' + (queueIndex + 1 + i))
+  // KILL SWITCH (plan §10.4): explanations off → hide the now-playing reason
+  // badge too (read per render; no extra state).
+  const showReasonBadge = !!current?.__rec && !surfaceFlags().noReasons
 
   const onDragEnd = (e: DragEndEvent) => {
     const { active, over } = e
@@ -230,7 +237,7 @@ export function QueuePanel() {
               <div className="min-w-0 flex-1">
                 <div className="text-sm text-white truncate font-medium flex items-center gap-1.5">
                   <span className="truncate">{current.title}</span>
-                  {current.__rec && (
+                  {showReasonBadge && (
                     <span title={current.__reason || 'Smart shuffle pick'} className="shrink-0 inline-flex">
                       <Sparkles size={12} className="text-[#1ed760]" aria-label="Smart shuffle pick" />
                     </span>

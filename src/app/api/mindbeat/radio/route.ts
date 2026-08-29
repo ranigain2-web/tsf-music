@@ -14,7 +14,11 @@ export const maxDuration = 30
  * MINDBEAT RADIO V2 — POST /api/mindbeat/radio
  *
  * body: { seedTrack: { videoId, title?, artistName?, artistId?, duration?, thumbnail? },
- *         count?: number (default 25), exclude?: string[] }
+ *         count?: number (default 25), exclude?: string[],
+ *         flags?: { recsOff?: boolean, noExplore?: boolean, noReasons?: boolean } }
+ *         (device kill switches from surfaceFlags() — recsOff answers an
+ *          empty pick set so callers fall back to legacy radio; noExplore
+ *          zeroes ε inside decide())
  *
  * → { picks: EnginePick[], vibe, epsilon }
  *
@@ -44,6 +48,24 @@ interface RadioBody {
   }
   count?: number
   exclude?: string[]
+  flags?: {
+    recsOff?: boolean
+    noExplore?: boolean
+    noReasons?: boolean
+  }
+}
+
+/** Manual parse with defaults — an absent/garbled flags object means all-off. */
+function parseFlags(raw: RadioBody['flags']): {
+  recsOff: boolean
+  noExplore: boolean
+  noReasons: boolean
+} {
+  return {
+    recsOff: raw?.recsOff === true,
+    noExplore: raw?.noExplore === true,
+    noReasons: raw?.noReasons === true,
+  }
 }
 
 function bandOf(energy: number): 'calm' | 'mid' | 'energetic' {
@@ -67,6 +89,13 @@ export async function POST(req: NextRequest) {
   }
   const count = Math.max(5, Math.min(MAX_COUNT, Math.floor(body?.count ?? DEFAULT_COUNT)))
   const excludeBody = Array.isArray(body?.exclude) ? body.exclude.filter((v) => typeof v === 'string') : []
+  const flags = parseFlags(body?.flags)
+
+  // KILL SWITCH (plan §10.4): 'tsf-mindbeat-off' → the personalized engine
+  // never runs. Empty picks send callers to the legacy non-personalized radio.
+  if (flags.recsOff) {
+    return Response.json({ picks: [], vibe: 'OFF', epsilon: 0 })
+  }
 
   try {
     const [profile, sessionCtx] = await Promise.all([compileProfile(), getSessionContext()])
@@ -144,6 +173,7 @@ export async function POST(req: NextRequest) {
         seed: sessionCtx.sessionId ?? seedTrack.videoId,
         reads,
         neighborAnchors: [{ videoId: seedTrack.videoId, ...(seedTrack.title ? { title: seedTrack.title } : {}) }],
+        exploreOff: flags.noExplore,
       },
     })
 
@@ -173,7 +203,10 @@ export async function POST(req: NextRequest) {
     let lastWasDrift = false
 
     for (let slot = 0; picks.length < count && consumed.size < rawPicks.length; slot++) {
-      const isDriftSlot = slot > 0 && (slot + 1) % RADIO.driftEvery === 0 && !lastWasDrift
+      // drift slots are FRESH_FIND-labeled novelty serves → disabled entirely
+      // when the user killed exploration (plan §10.4: no FRESH_FIND anywhere)
+      const isDriftSlot =
+        !flags.noExplore && slot > 0 && (slot + 1) % RADIO.driftEvery === 0 && !lastWasDrift
 
       if (isDriftSlot) {
         // drift prefers exploration pools; any pool is a fallback so the slot
@@ -206,7 +239,8 @@ export async function POST(req: NextRequest) {
     }
 
     const vibe = computeVibe(sessionCtx, { surface: 'radio' })
-    const epsilon = vibe === 'SKIP_STORM' ? 0 : profile.exploration.epsilon
+    // report the EFFECTIVE budget: noExplore zeroes ε exactly as decide() saw it
+    const epsilon = flags.noExplore ? 0 : vibe === 'SKIP_STORM' ? 0 : profile.exploration.epsilon
 
     return Response.json({ picks, vibe, epsilon, seed: seedTrack.videoId })
   } catch (e) {

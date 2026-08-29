@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { action, playlistId, name, description, videoId, track, trackIds } = await req.json()
+  const { action, playlistId, name, description, videoId, track, trackIds, source } = await req.json()
 
   switch (action) {
     case 'create': {
@@ -117,8 +117,12 @@ export async function POST(req: NextRequest) {
       return Response.json({ ok: true })
     }
     case 'bulkCreate': {
-      // create playlist from track list (AI / radio)
-      const pl = await db.playlist.create({ data: { name: name || 'New Playlist', description, source: description?.startsWith('ai') ? 'ai' : 'manual' } })
+      // create playlist from track list (AI / radio); explicit source wins,
+      // legacy callers keep the description-prefix heuristic (15-d: additive)
+      const src = source === 'ai' || source === 'manual' || source === 'radio'
+        ? source
+        : (description?.startsWith('ai') ? 'ai' : 'manual')
+      const pl = await db.playlist.create({ data: { name: name || 'New Playlist', description, source: src } })
       for (let i = 0; i < (trackIds || []).length; i++) {
         await db.playlistTrack.create({ data: { playlistId: pl.id, trackId: trackIds[i], position: i } }).catch(() => {})
       }

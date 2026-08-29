@@ -34,6 +34,14 @@ interface LibraryState {
   addToPlaylist: (playlistId: string, track: PlayerTrack) => Promise<void>
   removeFromPlaylist: (playlistId: string, videoId: string) => Promise<void>
   renamePlaylist: (id: string, name: string) => Promise<void>
+  /** 15-d: save a full playlist (name, description, tracks) — idempotent via existingId. */
+  savePlaylist: (input: {
+    name: string
+    description?: string | null
+    tracks: PlayerTrack[]
+    source?: string
+    existingId?: string
+  }) => Promise<Playlist | null>
 }
 
 export const useLibrary = create<LibraryState>((set, get) => ({
@@ -138,5 +146,39 @@ export const useLibrary = create<LibraryState>((set, get) => ({
       body: JSON.stringify({ action: 'rename', playlistId: id, name }),
     })
     await get().refresh()
+  },
+
+  // MINDBEAT (15-d): the AI Playlist Generator's "Save to Your Library" hook.
+  // Idempotent — when the generator already persisted the row server-side,
+  // `existingId` short-circuits to that playlist instead of duplicating it.
+  savePlaylist: async ({ name, description, tracks, source = 'manual', existingId }) => {
+    if (existingId) {
+      const known = () => get().playlists.find((p) => p.id === existingId) ?? null
+      const hit = known()
+      if (hit) return hit
+      await get().refresh()
+      const again = known()
+      if (again) return again
+    }
+    try {
+      const res = await fetch('/api/library/playlists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'bulkCreate',
+          name,
+          description: description ?? undefined,
+          source,
+          trackIds: tracks.map((t) => t.videoId).filter(Boolean),
+        }),
+      })
+      if (!res.ok) return null
+      const j = await res.json()
+      if (!j?.playlist) return null
+      await get().refresh()
+      return j.playlist as Playlist
+    } catch {
+      return null
+    }
   },
 }))

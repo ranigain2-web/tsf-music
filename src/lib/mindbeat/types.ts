@@ -19,7 +19,7 @@ export const EVENT_TYPES = [
   'TRACK_SKIP', 'TRACK_END', 'TRACK_SEEK', 'TRACK_LIKE', 'TRACK_UNLIKE',
   'TRACK_DOWNLOAD', 'QUEUE_ADD_MANUAL', 'QUEUE_REMOVE', 'REC_EXPOSURE',
   'SEARCH_QUERY', 'SEARCH_CLICK', 'PLAYLIST_SAVE_AI', 'AI_REGENERATE',
-  'NOT_FOR_ME', 'STATION_ENDED',
+  'NOT_FOR_ME', 'STATION_ENDED', 'SHELF_EXPOSURE',
 ] as const
 export type EventType = (typeof EVENT_TYPES)[number]
 
@@ -230,6 +230,8 @@ export interface ListenRecord {
   artistName?: string
   sessionId: string
   surface?: SourceSurface
+  /** Home shelf that served this listen (payload.shelfId of its TRACK_START) — shelf-bandit attribution. */
+  shelfId?: string
   startedTs: string
   listenedMs: number
   durationMs: number

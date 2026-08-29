@@ -5,6 +5,9 @@ import { artist as ytmArtist, radio as ytmRadio, search as ytmSearch } from '@/l
 import type { YtmTrack, YtmAlbum, YtmArtist, YtmShelf } from '@/lib/ytm'
 import { filterSafeTracks, isShelfTitleSafe } from '@/lib/safety'
 import { cachedJson } from '@/lib/ai/cache'
+import { buildNowSound } from '@/lib/mindbeat/daylist'
+import { buildOnTheRise } from '@/lib/mindbeat/on-the-rise'
+import { getShelfBanditState, reorderShelves, banditMeta } from '@/lib/mindbeat/shelf-bandit'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -22,19 +25,24 @@ export const maxDuration = 120
  *   5. "[Artist] · Albums"          — discography for the second favorite
  *   6. "Because you like [Genre]"  — genre search shelf per selected genre
  *
- * Result cached in ApiCache (key `ai:home:v1`) for 4h.
+ * Result cached in ApiCache (key `ai:home:v2`) for 4h — bandit reordering
+ * runs per-request AFTER cache retrieval and is never baked into the cache.
  */
 
-const CACHE_KEY = 'ai:home:v1'
+// v2: shelf payloads now carry stable ids (task 15-c shelf bandit) — the old
+// v1 rows keep the id-less shape, so the version bumps and v1 expires naturally.
+const CACHE_KEY = 'ai:home:v2'
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000
 
 interface AiHome {
-  shelves: YtmShelf[]
+  shelves: (YtmShelf & { id?: string })[]
   mixes: { id: string; title: string; subtitle: string; cover?: string; tracks: any[] }[]
   topArtists: SelectedArtist[]
   greeting: string
   name?: string
   needsOnboarding?: boolean
+  /** Shelf-bandit transparency (task 15-c): live = a champion earned the top slot. */
+  bandit?: { mode: 'live' | 'cold'; champion?: string; dayBucket: number }
 }
 
 function greeting(): string {
@@ -44,6 +52,46 @@ function greeting(): string {
   if (h < 18) return 'Good afternoon'
   if (h < 22) return 'Good evening'
   return 'Good night'
+}
+
+/**
+ * MINDBEAT plan surfaces (§9.4 Daylist / §9.6 On the Rise) attach to the
+ * home feed WITHOUT reordering the existing shelves: "Now Sound" lands as
+ * the first music shelf after "Your top artists" (Spotify puts the Daylist
+ * near the top), "On the Rise" right after it. Both builders are read-only
+ * engine/pool work with their own in-memory caches, run in parallel, and a
+ * failure simply omits the shelf — home never breaks because of them.
+ *
+ * Shelf ids for the shelf-bandit/telemetry: 'now-sound' · 'on-the-rise'.
+ */
+function insertShelfAt(shelves: (YtmShelf & { id?: string })[], shelf: YtmShelf & { id?: string }, index: number): (YtmShelf & { id?: string })[] {
+  const out = [...shelves]
+  out.splice(Math.max(0, Math.min(index, out.length)), 0, shelf)
+  return out
+}
+
+async function attachPlanShelves(home: AiHome): Promise<AiHome> {
+  const [nsRes, otrRes] = await Promise.allSettled([
+    buildNowSound(),
+    buildOnTheRise(),
+  ])
+  if (nsRes.status === 'fulfilled' && nsRes.value.tracks.length) {
+    const ns = nsRes.value
+    home.shelves = insertShelfAt(
+      home.shelves,
+      { id: 'now-sound', title: ns.title, subtitle: ns.subtitle, tracks: ns.tracks },
+      1 // first music shelf after "Your top artists"
+    )
+  }
+  if (otrRes.status === 'fulfilled' && otrRes.value.tracks.length) {
+    const otr = otrRes.value
+    home.shelves = insertShelfAt(
+      home.shelves,
+      { id: 'on-the-rise', title: otr.name, subtitle: `Anchored by ${otr.seed.artistName}`, tracks: otr.tracks },
+      2 // right after the Now Sound shelf
+    )
+  }
+  return home
 }
 
 function trackToPlayer(t: any) {
@@ -84,12 +132,24 @@ async function buildMixes(artists: SelectedArtist[]) {
   return mixes
 }
 
-async function buildTopTracksShelf(artist: SelectedArtist): Promise<YtmShelf | null> {
+/**
+ * Stable shelf ids (shelf-bandit/telemetry contract, task 15-c):
+ *   'top-artists' · 'now-sound' · 'on-the-rise' · 'artist-top-{artistId}'
+ *   'more-like-{artistId}' · 'albums-{artistId}' · 'genre-{slug}'
+ * The bandit reorders ONLY shelves carrying these ids; anything else keeps
+ * its curated position.
+ */
+function genreSlug(genre: string): string {
+  return genre.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'genre'
+}
+
+async function buildTopTracksShelf(artist: SelectedArtist): Promise<(YtmShelf & { id?: string }) | null> {
   try {
     const page = await ytmArtist(artist.id)
     const tracks = filterSafeTracks((page.topTracks || []).slice(0, 8))
     if (!tracks.length) return null
     return {
+      id: `artist-top-${artist.id}`,
       title: `${artist.name} · Top tracks`,
       subtitle: "Songs you'll recognise",
       tracks,
@@ -99,7 +159,7 @@ async function buildTopTracksShelf(artist: SelectedArtist): Promise<YtmShelf | n
   }
 }
 
-async function buildMoreLikeShelf(artist: SelectedArtist): Promise<YtmShelf | null> {
+async function buildMoreLikeShelf(artist: SelectedArtist): Promise<(YtmShelf & { id?: string }) | null> {
   try {
     const page = await ytmArtist(artist.id)
     const related = (page.shelves || []).find(
@@ -112,6 +172,7 @@ async function buildMoreLikeShelf(artist: SelectedArtist): Promise<YtmShelf | nu
     const safeArtists = related.artists.filter((a) => isShelfTitleSafe(a.name)).slice(0, 10)
     if (!safeArtists.length) return null
     return {
+      id: `more-like-${artist.id}`,
       title: `More like ${artist.name}`,
       subtitle: "Artists you'll probably love",
       artists: safeArtists,
@@ -121,7 +182,7 @@ async function buildMoreLikeShelf(artist: SelectedArtist): Promise<YtmShelf | nu
   }
 }
 
-async function buildDiscographyShelf(artist: SelectedArtist): Promise<YtmShelf | null> {
+async function buildDiscographyShelf(artist: SelectedArtist): Promise<(YtmShelf & { id?: string }) | null> {
   try {
     const page = await ytmArtist(artist.id)
     const discog = (page.shelves || []).find((s) => /albums|discography|releases/i.test(s.title) && s.albums?.length)
@@ -131,6 +192,7 @@ async function buildDiscographyShelf(artist: SelectedArtist): Promise<YtmShelf |
       .slice(0, 10)
     if (!safeAlbums.length) return null
     return {
+      id: `albums-${artist.id}`,
       title: `${artist.name} · Albums`,
       subtitle: 'Full discography at a glance',
       albums: safeAlbums,
@@ -140,22 +202,24 @@ async function buildDiscographyShelf(artist: SelectedArtist): Promise<YtmShelf |
   }
 }
 
-async function buildGenreShelf(genre: string, subtitle: string): Promise<YtmShelf | null> {
+async function buildGenreShelf(genre: string, subtitle: string): Promise<(YtmShelf & { id?: string }) | null> {
   try {
     const r = await ytmSearch(`${genre} hits`, 'songs')
     const tracks = filterSafeTracks((r.tracks || []).slice(0, 12))
     if (!tracks.length) return null
-    return { title: subtitle, tracks }
+    return { id: `genre-${genreSlug(genre)}`, title: subtitle, tracks }
   } catch {
     return null
   }
 }
 
 async function buildAiHome(profile: Awaited<ReturnType<typeof readProfile>>): Promise<AiHome> {
-  const shelves: YtmShelf[] = []
+  const shelves: (YtmShelf & { id?: string })[] = []
 
-  // 1. "Your top artists" shelf — artist cards from prefs
-  const topArtists: YtmShelf = {
+  // 1. "Your top artists" shelf — artist cards from prefs (identity shelf:
+  //    pinned at position 0 by the shelf bandit, never demoted)
+  const topArtists: YtmShelf & { id?: string } = {
+    id: 'top-artists',
     title: 'Your top artists',
     subtitle: profile.genres.length ? `From your ${profile.genres.slice(0, 3).join(', ')} picks` : 'Tap to dive in',
     artists: profile.artists.map((a) => ({
@@ -230,5 +294,25 @@ export async function GET() {
     refresh: () => ({ greeting: greeting(), name: profile.name }),
   })
 
-  return NextResponse.json(home)
+  // MINDBEAT plan shelves — additive, parallel, failure = silently omitted
+  let out = home
+  try {
+    out = await attachPlanShelves(home)
+  } catch {
+    out = home // plan shelves omitted — home never breaks because of them
+  }
+
+  // SHELF BANDIT (task 15-c): per-REQUEST reorder on the parsed-per-request
+  // shelf array — runs AFTER the 4h cache retrieval so the curated order
+  // stays baked in the cache and the bandit order never pollutes it.
+  // Reorder-only: existing shelves never disappear. Failure = curated order.
+  try {
+    const state = await getShelfBanditState()
+    out.shelves = reorderShelves(out.shelves, state)
+    out.bandit = banditMeta(state, out.shelves)
+  } catch {
+    // bandit unavailable → serve the curated order untouched, no bandit field
+  }
+
+  return NextResponse.json(out)
 }

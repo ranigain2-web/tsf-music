@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { readProfile } from '../../onboarding/route'
 import { db } from '@/lib/db'
+import { nextShiftHint } from '@/lib/mindbeat/daylist-name'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -45,23 +46,8 @@ const MOODS: { key: string; label: string; subtitle: string; gradient: [string, 
   { key: 'throwback', label: 'Throwback', subtitle: 'Classics & gems',        gradient: ['#ba5d07', '#503750'], emoji: '📼' },
 ]
 
-const TIME_BLOCKS = [
-  { start: 4, end: 9, name: 'Rise & Shine' },
-  { start: 9, end: 12, name: 'Focus Flow' },
-  { start: 12, end: 15, name: 'Lunch Break' },
-  { start: 15, end: 18, name: 'Energy Boost' },
-  { start: 18, end: 22, name: 'Unwind' },
-  { start: 22, end: 28, name: 'Wind Down' },
-]
-
-function getCurrentBlockLabel(): string {
-  const h = new Date().getHours()
-  const block = TIME_BLOCKS.find((b) => {
-    if (b.end > 24) return h >= b.start || h < (b.end - 24)
-    return h >= b.start && h < b.end
-  })
-  return block?.name || 'Wind Down'
-}
+// (the old 6-block labels were retired with Daylist v2 — block math now
+// lives in @/lib/mindbeat via the constitution's five Heggli blocks)
 
 export async function GET() {
   const profile = await readProfile()
@@ -73,10 +59,6 @@ export async function GET() {
       needsOnboarding: true,
     })
   }
-
-  const hour = new Date().getHours()
-  const hourStr = hour === 0 ? '12 AM' : hour > 12 ? `${hour - 12} PM` : `${hour} AM`
-  const blockLabel = getCurrentBlockLabel()
 
   const cards: FeaturedCard[] = [
     {
@@ -104,8 +86,11 @@ export async function GET() {
     {
       id: 'daylist',
       kind: 'playlist',
-      title: blockLabel,
-      subtitle: `Your ${hourStr} mix · ${profile.name || 'you'}`,
+      // MINDBEAT §9.4: the daylist hub is "Now Sound" — the generated name
+      // ("After Hours Soft Pop") + next-block shift hint live on the payload
+      // the card opens into.
+      title: 'Now Sound',
+      subtitle: `Shifts around ${nextShiftHint()} · ${profile.name || 'you'}`,
       gradient: ['#ba5d07', '#477d95'],
       emoji: '⏰',
       icon: 'AlarmClock',

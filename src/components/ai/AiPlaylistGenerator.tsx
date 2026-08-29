@@ -13,23 +13,43 @@
  * sequence, so the server re-emits the corrected order right after that
  * phase — the client clears what it has and re-renders.
  *
+ * S1.5 CLARIFY (15-d): a vague prompt (intentConfidence < 0.4) streams ONE
+ * {type:'clarify'} event — a question with 2-3 tappable option chips, each
+ * carrying a concrete intent patch. Rendered INLINE in the staged progress
+ * view (never a modal/form). "Just pick for me" proceeds without a patch;
+ * ignoring the question for 12s auto-proceeds — the pipeline never stalls.
+ *
+ * Regenerate (15-d): the result view carries a ghost RefreshCw button that
+ * re-POSTs with variantIndex+1 + previousIds (the take's ids) — the server
+ * enforces ≥40% new tracks. Three takes max per prompt.
+ *
+ * Save to Library (15-d): BookmarkPlus saves the take via the library store
+ * (idempotent — the pipeline already persisted the row) and fires the
+ * PLAYLIST_SAVE_AI ledger event exactly once per successful save.
+ *
  * Purity (Bar 2): the only branding in this surface is "TSF AI".
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Sparkles, Loader2, Wand2, Music2, CheckCircle2, Shuffle } from 'lucide-react'
+import {
+  Sparkles, Loader2, Wand2, Music2, CheckCircle2, RefreshCw, BookmarkPlus,
+  BookmarkCheck, MessageCircleQuestion,
+} from 'lucide-react'
+import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { useNav, api } from '@/store/nav'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useNav } from '@/store/nav'
 import { useLibrary } from '@/store/library'
-// MINDBEAT: AI_REGENERATE gets its long-missing hook (see worklog 13-b)
-import { aiRegenerate } from '@/lib/mindbeat/client'
+import { aiRegenerate, playlistSaveAi } from '@/lib/mindbeat/client'
 
 interface Track {
   videoId: string
   title: string
   artistName: string
+  artistId?: string
+  albumName?: string
   thumbnail?: string
   duration?: number
   reason?: string
@@ -40,6 +60,21 @@ interface DoneEvent {
   title: string
   total: number
   ms?: number
+}
+
+/** SSE {type:'clarify'} event — question + tappable concrete-patch options. */
+interface ClarifyState {
+  promptHash: string
+  question: string
+  options: { label: string; patch: Record<string, unknown> }[]
+}
+
+interface GenerateOpts {
+  /** re-take index (1-based when > 0) + the previous take's ids for divergence */
+  variantIndex?: number
+  previousIds?: string[]
+  /** clarification round-trip: echoes the promptHash + the tapped patch */
+  clarify?: { promptHash: string; optionIndex: number; patch?: Record<string, unknown> }
 }
 
 const SUGGESTIONS = [
@@ -58,6 +93,7 @@ const PHASE_LABELS: Record<string, string> = {
   understand: 'Reading your taste…',
   hunt: 'Hunting real tracks…',
   curate: 'Curating the arc…',
+  diverge: 'Re-mixing a fresh take…',
   polish: 'Polishing the flow…',
   narrate: 'Naming it…',
   // v1 fallbacks (older cached streams, etc.)
@@ -76,12 +112,15 @@ const FALLBACK_HINTS = [
   'Finding a few hidden gems…',
 ]
 
+const CLARIFY_AUTOPROCEED_MS = 12_000 // ignored question → best-guess proceed
+const VARIANT_MAX = 3 // total takes per prompt (take 1 = the original)
+
 function fmtMs(ms?: number): string {
   if (!ms) return ''
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-/** djb2 — tiny stable prompt hash for the AI_REGENERATE ledger event. */
+/** djb2 — tiny stable prompt hash for the MINDBEAT ledger events. */
 function promptHash(p: string): string {
   let h = 5381
   for (let i = 0; i < p.length; i++) h = ((h << 5) + h + p.charCodeAt(i)) | 0
@@ -107,11 +146,16 @@ export function AiPlaylistGenerator({
   const [phaseLabel, setPhaseLabel] = useState<string | null>(null)
   const [hintIdx, setHintIdx] = useState(0)
   const [wantCount, setWantCount] = useState(25)
-  const [regenCount, setRegenCount] = useState(0)
+  const [variantIndex, setVariantIndex] = useState(0) // the take on screen (0-based)
+  const [clarify, setClarify] = useState<ClarifyState | null>(null)
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const abortRef = useRef<AbortController | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  /** the answered clarification — rides on re-takes so the patched intent carries over */
+  const lastClarifyRef = useRef<{ promptHash: string; optionIndex: number; patch?: Record<string, unknown> } | null>(null)
   const push = useNav((s) => s.push)
   const refreshLibrary = useLibrary((s) => s.refresh)
+  const savePlaylist = useLibrary((s) => s.savePlaylist)
 
   // pre-fill support (Vibe Search hands its query over)
   useEffect(() => {
@@ -120,10 +164,10 @@ export function AiPlaylistGenerator({
 
   // rotate the humanized status copy only while no stage label is streaming
   useEffect(() => {
-    if (!loading || done || phaseLabel) return
+    if (!loading || done || phaseLabel || clarify) return
     const t = setInterval(() => setHintIdx((i) => (i + 1) % FALLBACK_HINTS.length), 2200)
     return () => clearInterval(t)
-  }, [loading, done, phaseLabel])
+  }, [loading, done, phaseLabel, clarify])
 
   // keep the growing list pinned to the newest entries
   useEffect(() => {
@@ -131,7 +175,7 @@ export function AiPlaylistGenerator({
     if (el && loading) el.scrollTop = el.scrollHeight
   }, [tracks.length, loading])
 
-  const generate = async (p: string, isRegen = false) => {
+  const generate = useCallback(async (p: string, opts?: GenerateOpts) => {
     if (!p.trim()) return
     setLoading(true)
     setError(null)
@@ -140,14 +184,22 @@ export function AiPlaylistGenerator({
     setDone(null)
     setPhaseLabel(null)
     setHintIdx(0)
-    if (isRegen) setRegenCount((n) => n + 1)
+    setClarify(null)
+    setSaveState('idle')
+    setVariantIndex(opts?.variantIndex ?? 0)
     const ctrl = new AbortController()
     abortRef.current = ctrl
     try {
       const res = await fetch('/api/ai/playlist-generator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: p.trim(), count: wantCount, ...(isRegen ? { regenerate: true } : {}) }),
+        body: JSON.stringify({
+          prompt: p.trim(),
+          count: wantCount,
+          ...(opts?.variantIndex ? { variantIndex: opts.variantIndex } : {}),
+          ...(opts?.previousIds?.length ? { previousIds: opts.previousIds } : {}),
+          ...(opts?.clarify ? { clarify: opts.clarify } : {}),
+        }),
         signal: ctrl.signal,
       })
       if (!res.ok || !res.body) {
@@ -169,7 +221,19 @@ export function AiPlaylistGenerator({
           if (!line) continue
           let ev: any
           try { ev = JSON.parse(line.slice(5).trim()) } catch { continue }
-          if (ev.type === 'meta') {
+          if (ev.type === 'clarify') {
+            // S1.5: one question, tappable options — the stream closes after
+            setClarify({
+              promptHash: typeof ev.promptHash === 'string' ? ev.promptHash : promptHash(p.trim()),
+              question: typeof ev.question === 'string' ? ev.question : 'Help me narrow the vibe?',
+              options: Array.isArray(ev.options)
+                ? ev.options
+                    .filter((o: any) => o && typeof o.label === 'string')
+                    .slice(0, 3)
+                    .map((o: any) => ({ label: o.label as string, patch: (o.patch ?? {}) as Record<string, unknown> }))
+                : [],
+            })
+          } else if (ev.type === 'meta') {
             setMeta({ title: ev.title || '', description: ev.description || '' })
           } else if (ev.type === 'phase') {
             // `polish` means the deterministic polisher corrected the order —
@@ -182,6 +246,7 @@ export function AiPlaylistGenerator({
             throw new Error(ev.message || 'Generation failed')
           } else if (ev.type === 'done') {
             setDone({ playlistId: ev.playlistId, title: ev.title, total: ev.total, ms: ev.ms })
+            if (typeof ev.variantIndex === 'number') setVariantIndex(ev.variantIndex)
             void refreshLibrary()
           }
         }
@@ -194,6 +259,76 @@ export function AiPlaylistGenerator({
       setLoading(false)
       abortRef.current = null
     }
+  }, [wantCount, refreshLibrary])
+
+  // 12s safety: an ignored question auto-proceeds with the best guess
+  const clarifyProceedRef = useRef<() => void>(() => {})
+  useEffect(() => {
+    if (!clarify) return
+    const t = setTimeout(() => clarifyProceedRef.current(), CLARIFY_AUTOPROCEED_MS)
+    return () => clearTimeout(t)
+  }, [clarify])
+  clarifyProceedRef.current = () => {
+    if (!clarify) return
+    const c = clarify
+    lastClarifyRef.current = { promptHash: c.promptHash, optionIndex: -1 }
+    setClarify(null)
+    void generate(prompt, { clarify: lastClarifyRef.current })
+  }
+
+  const answerClarify = (optIndex: number) => {
+    if (!clarify) return
+    const c = clarify
+    const opt = c.options[optIndex]
+    lastClarifyRef.current = { promptHash: c.promptHash, optionIndex: optIndex, ...(opt ? { patch: opt.patch } : {}) }
+    setClarify(null)
+    void generate(prompt, { clarify: lastClarifyRef.current })
+  }
+
+  const regenerate = () => {
+    const next = variantIndex + 1
+    if (!prompt.trim() || next >= VARIANT_MAX || loading) return
+    // MINDBEAT: AI_REGENERATE — fires with the take being requested
+    aiRegenerate(promptHash(prompt.trim()), next)
+    void generate(prompt, {
+      variantIndex: next,
+      previousIds: tracks.map((t) => t.videoId).filter(Boolean),
+      ...(lastClarifyRef.current ? { clarify: lastClarifyRef.current } : {}),
+    })
+  }
+
+  const saveToLibrary = async () => {
+    if (!done || saveState !== 'idle') return
+    setSaveState('saving')
+    try {
+      const pl = await savePlaylist({
+        name: done.title || meta?.title || 'AI Playlist',
+        description: meta?.description ?? '',
+        tracks: tracks.map((t) => ({
+          videoId: t.videoId,
+          title: t.title,
+          artistName: t.artistName,
+          artistId: t.artistId,
+          albumName: t.albumName,
+          duration: t.duration ?? 0,
+          thumbnail: t.thumbnail ?? '',
+        })),
+        source: 'ai',
+        existingId: done.playlistId || undefined,
+      })
+      if (pl) {
+        // PLAYLIST_SAVE_AI — exactly once per successful save
+        playlistSaveAi(pl.id, promptHash(prompt.trim()))
+        setSaveState('saved')
+        toast.success('Saved to Your Library')
+      } else {
+        setSaveState('idle')
+        toast.error("Couldn't save — try again")
+      }
+    } catch {
+      setSaveState('idle')
+      toast.error("Couldn't save — try again")
+    }
   }
 
   const close = () => {
@@ -205,11 +340,15 @@ export function AiPlaylistGenerator({
     setDone(null)
     setPhaseLabel(null)
     setLoading(false)
-    setRegenCount(0)
+    setVariantIndex(0)
+    setClarify(null)
+    setSaveState('idle')
+    lastClarifyRef.current = null
     onOpenChange(false)
   }
 
   const curating = loading && !done
+  const atTakeCap = variantIndex >= VARIANT_MAX - 1
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) close(); else onOpenChange(o) }}>
@@ -225,7 +364,7 @@ export function AiPlaylistGenerator({
         </DialogHeader>
 
         <div className="px-6 pb-6 space-y-4">
-          {(!tracks.length && !done) && (
+          {(!tracks.length && !done && !clarify) && (
             <>
               <div className="relative">
                 <textarea
@@ -305,6 +444,50 @@ export function AiPlaylistGenerator({
             </>
           )}
 
+          {/* S1.5 CLARIFY — one question, tappable chips, inline in the staged view */}
+          {clarify && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-xs text-[#a7a7a7] px-1">
+                <Loader2 size={12} className={`text-[#1ed760] ${loading ? 'animate-spin' : ''}`} />
+                <span>Good start — one quick question</span>
+              </div>
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 space-y-3">
+                <p className="text-sm font-semibold text-white flex items-center gap-2">
+                  <MessageCircleQuestion size={15} className="text-[#1ed760] shrink-0" />
+                  {clarify.question}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {clarify.options.map((o, i) => (
+                    <button
+                      key={o.label}
+                      onClick={() => answerClarify(i)}
+                      className="px-3.5 h-9 rounded-full border border-white/[0.1] bg-white/[0.06] hover:border-[#1ed760]/70 hover:bg-[#1ed760]/10 hover:text-[#1ed760] text-xs font-semibold text-white transition-all duration-150 active:scale-95"
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <button
+                    onClick={() => clarifyProceedRef.current()}
+                    className="text-xs text-[#a7a7a7] hover:text-white underline-offset-2 hover:underline transition-colors duration-150"
+                  >
+                    Just pick for me
+                  </button>
+                  <span className="text-[10px] text-[#7a7a7a] tabular-nums">
+                    Auto-picks in {CLARIFY_AUTOPROCEED_MS / 1000}s
+                  </span>
+                </div>
+                <motion.div
+                  initial={{ width: '100%' }}
+                  animate={{ width: '0%' }}
+                  transition={{ duration: CLARIFY_AUTOPROCEED_MS / 1000, ease: 'linear' }}
+                  className="h-0.5 rounded-full bg-[#1ed760]/40"
+                />
+              </div>
+            </div>
+          )}
+
           {(tracks.length > 0 || done) && (
             <div className="space-y-4">
               {/* header */}
@@ -318,7 +501,6 @@ export function AiPlaylistGenerator({
                     className="w-24 h-24 rounded-md shadow-xl shadow-black/50 overflow-hidden shrink-0"
                   >
                     {tracks[0]?.thumbnail ? (
-                       
                       <img src={tracks[0].thumbnail} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-[#1ed760] to-[#0d73ec] flex items-center justify-center">
@@ -332,7 +514,7 @@ export function AiPlaylistGenerator({
                     {done ? (
                       <>
                         <CheckCircle2 size={12} />
-                        Created{done.ms ? ` in ${fmtMs(done.ms)}` : ''}
+                        Created{done.ms ? ` in ${fmtMs(done.ms)}` : ''}{variantIndex > 0 ? ` · Take ${variantIndex + 1}` : ''}
                       </>
                     ) : (
                       <>
@@ -387,7 +569,6 @@ export function AiPlaylistGenerator({
                     >
                       <span className="text-[#7a7a7a] text-xs w-5 text-right tabular-nums">{i + 1}</span>
                       {t.thumbnail ? (
-                         
                         <img src={t.thumbnail} alt="" className="w-9 h-9 rounded object-cover shrink-0" loading="lazy" />
                       ) : (
                         <div className="w-9 h-9 rounded bg-white/10 shrink-0" />
@@ -422,27 +603,61 @@ export function AiPlaylistGenerator({
                     <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
-                        onClick={() => { setTracks([]); setMeta(null); setDone(null); setPhaseLabel(null) }}
+                        onClick={() => {
+                          setTracks([]); setMeta(null); setDone(null); setPhaseLabel(null)
+                          setVariantIndex(0); setClarify(null); setSaveState('idle')
+                          lastClarifyRef.current = null
+                        }}
                         className="text-white hover:bg-white/10"
                       >
                         Make another
                       </Button>
                       {prompt.trim() && (
-                        <Button
-                          variant="ghost"
-                          onClick={() => {
-                            // MINDBEAT: AI_REGENERATE — the event 13-b shipped
-                            // without a hook finally gets one
-                            aiRegenerate(promptHash(prompt.trim()), regenCount + 1)
-                            void generate(prompt, true)
-                          }}
-                          className="text-[#a7a7a7] hover:text-white hover:bg-white/10"
-                          title="A different take on the same vibe — at least 40% new tracks"
-                        >
-                          <Shuffle size={13} className="mr-1.5" />
-                          Remix this
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              className={atTakeCap ? 'inline-block' : ''}
+                              title={atTakeCap ? 'Three takes is the limit — try a new angle' : undefined}
+                            >
+                              <Button
+                                variant="ghost"
+                                onClick={regenerate}
+                                disabled={atTakeCap}
+                                aria-label={atTakeCap ? 'Three takes is the limit — try a new angle' : 'Regenerate — a different take on the same vibe'}
+                                className="text-[#a7a7a7] hover:text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent"
+                              >
+                                <RefreshCw size={13} className="mr-1.5" />
+                                Regenerate
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          {atTakeCap && (
+                            <TooltipContent side="top">
+                              Three takes is the limit — try a new angle
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
                       )}
+                      <Button
+                        variant="ghost"
+                        onClick={() => void saveToLibrary()}
+                        disabled={saveState !== 'idle'}
+                        className={saveState === 'saved'
+                          ? 'text-[#1ed760] hover:text-[#1ed760] hover:bg-transparent'
+                          : 'text-[#a7a7a7] hover:text-white hover:bg-white/10'}
+                      >
+                        {saveState === 'saved' ? (
+                          <>
+                            <BookmarkCheck size={13} className="mr-1.5" />
+                            Saved
+                          </>
+                        ) : (
+                          <>
+                            <BookmarkPlus size={13} className="mr-1.5" />
+                            {saveState === 'saving' ? 'Saving…' : 'Save'}
+                          </>
+                        )}
+                      </Button>
                     </div>
                     <Button
                       onClick={() => {
@@ -469,7 +684,7 @@ export function AiPlaylistGenerator({
             </div>
           )}
 
-          {!tracks.length && !done && !loading && (
+          {!tracks.length && !done && !clarify && !loading && (
             <p className="text-[11px] text-[#7a7a7a] text-center">
               Powered by TSF AI
             </p>
