@@ -22,6 +22,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AiPlaylistGenerator } from '@/components/ai/AiPlaylistGenerator'
 import { TasteDNA } from '@/components/mindbeat/TasteDNA'
+import { WhatsNewDialog, useWhatsNewOpen } from '@/components/whats-new/WhatsNewDialog'
+import { APP_VERSION } from '@/components/whats-new/whats-new'
 import { Artwork } from '@/components/Artwork'
 
 export function Sidebar() {
@@ -33,6 +35,7 @@ export function Sidebar() {
   const [createOpen, setCreateOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [tasteOpen, setTasteOpen] = useState(false)
+  const whatsNew = useWhatsNewOpen()
   const [newName, setNewName] = useState('')
   const [createMenuOpen, setCreateMenuOpen] = useState(false)
 
@@ -188,6 +191,15 @@ export function Sidebar() {
         </div>
       </div>
 
+      {/* version badge — reopens the What's New dialog (reference repo v3.2 pattern) */}
+      <button
+        onClick={whatsNew.reopen}
+        className="mx-3 mb-3 mt-auto self-start text-left text-[11px] font-medium text-[#6a6a6a] hover:text-[#a7a7a7] transition-colors"
+        aria-label={`TSF Music version ${APP_VERSION} — see what's new`}
+      >
+        v{APP_VERSION} · What&apos;s new
+      </button>
+
       {/* create playlist dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="bg-[#282828] border-none text-white max-w-[360px]">
@@ -229,6 +241,9 @@ export function Sidebar() {
 
       {/* Taste DNA — MINDBEAT transparency surface */}
       <TasteDNA open={tasteOpen} onOpenChange={setTasteOpen} />
+
+      {/* What's New — shows once per version, reopenable from the badge */}
+      <WhatsNewDialog open={whatsNew.open} onDismiss={whatsNew.dismiss} />
     </>
   )
 }
