@@ -914,3 +914,17 @@ Work Log:
 
 Stage Summary:
 - Release artifacts will carry the true 0.3.0 version across DMG/APK names.
+
+---
+Task ID: 16-done
+Agent: Z.ai Code (orchestrator)
+Task: WAVE 16 SHIPPED — final verification record
+
+Work Log:
+- RELEASE v0.3.0 LIVE on GitHub: TSF-Music-0.3.0-x64.dmg (276MB, Intel i9 MacBook Pro 2019 target) + -arm64.dmg + zips + app-release-unsigned.apk + tsf-music-ios-unsigned.ipa. Stale 0.1.1 assets deleted; release is clean.
+- ALL THREE WORKFLOWS COMPLETED SUCCESS on fc561c0 (the version-coherent release commit): macOS App (incl. the 20-track playback probe gate) ✓, Build Android APK ✓, Build iOS IPA ✓. Zero errors.
+- Final local gate: lint 0; tsc clean in src/; BAR-ENGINE oracle 29/29; live Hinglish correction "kun fya kun" → Kun Faaya Kun (A.R. Rahman) top-of-51-rows on the real catalog.
+- Gauntlet closed: BAR-ENGINE won with hard evidence (proof script + live latency/behavior probes), BAR-UI won (six archived screenshots matching the reference's documented states: hero, live search, YouTube toggle, lyric search, honest zero, What's New), BAR-OPS won (three green platform workflows + tagged release).
+
+Stage Summary:
+- The mua47105-hue/TSF-MUSIC v3.4 feature set (Search V2 S0–S5 + YouTube source + title-truth rescue + lyric search + typeahead + honest zeros + Jump back in + What's New) is ported, verified end-to-end, and shipped as v0.3.0 for Mac Intel (plus arm64/Android/iOS). Everything the user asked — clone/understand A-to-Z, bars via gauntlet loop, E2E test, push, CI-watch to green — is done.
