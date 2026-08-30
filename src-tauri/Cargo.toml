@@ -1,6 +1,6 @@
 [package]
 name = "tsf-music-desktop"
-version = "0.1.1"
+version = "0.3.0"
 description = "TSF Music — AI music player (macOS/Windows/Linux shell)"
 authors = ["TSF Music"]
 edition = "2021"
