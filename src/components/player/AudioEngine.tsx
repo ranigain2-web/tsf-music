@@ -96,6 +96,20 @@ export function AudioEngine() {
   const trackCtxRef = useRef<{ id: string; ctx: mb.PlaybackContext } | null>(null)
   // last time the native playback-state was pushed (1/s throttle)
   const lastNativeStateRef = useRef(0)
+  // ---- INITIAL-LOAD WATCHDOG (the "stuck loading forever" fix) -------------
+  // The stall watchdog only samples while audio is PLAYING — the very first
+  // load (play clicked → /api/stream resolving) had no deadline at all, so a
+  // slow resolve spun the UI forever. Ladder: ~9s honest "still connecting"
+  // hint → 22s one cache-busting re-resolve → ~32s honest skip (engine-
+  // initiated, never counted as a user skip). Tokens invalidate stale timers
+  // across track changes.
+  const loadTokenRef = useRef(0)
+  const everPlayedRef = useRef(false)
+  const loadTimersRef = useRef<number[]>([])
+  const clearLoadTimers = () => {
+    for (const t of loadTimersRef.current) window.clearTimeout(t)
+    loadTimersRef.current = []
+  }
   // ---- SponsorBlock "straight to the music" (Musify-ported) ----
   // Community-curated non-music segments (intros/outros/sponsor plugs) for
   // the CURRENT track. Empty for most studio recordings; when present the
@@ -129,6 +143,11 @@ export function AudioEngine() {
     const setLoading = usePlayer.getState().setLoading
     const setStreamProvider = usePlayer.getState().setStreamProvider
     const setError = usePlayer.getState().setError
+
+    const clearLoadTimers = () => {
+      for (const t of loadTimersRef.current) window.clearTimeout(t)
+      loadTimersRef.current = []
+    }
 
     const onTimeUpdate = () => {
       // ---- SponsorBlock auto-skip ----
@@ -236,6 +255,8 @@ export function AudioEngine() {
     const onPlaying = () => {
       setLoading(false)
       setError(null)
+      everPlayedRef.current = true // first bytes delivered — load watchdog stands down
+      clearLoadTimers()
       // re-apply volume in case browser reset on track switch
       const s = usePlayer.getState()
       audio.volume = s.muted ? 0 : s.volume
@@ -446,6 +467,7 @@ export function AudioEngine() {
 
     return () => {
       window.clearInterval(watchdog)
+      clearLoadTimers()
       document.removeEventListener('visibilitychange', onVisForMindbeat)
       mb.stopHeartbeats()
       audio.removeEventListener('timeupdate', onTimeUpdate)
@@ -520,6 +542,47 @@ export function AudioEngine() {
     const meta = `&title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artistName || '')}`
     audio.src = `/api/stream?id=${encodeURIComponent(track.videoId)}${dur}${meta}${streamModeParam()}`
     audio.load()
+
+    // ---- arm the INITIAL-LOAD WATCHDOG ladder ------------------------------
+    // 9s honest hint → 22s one cache-busting re-resolve (+10s budget) →
+    // ~32s honest engine-initiated skip. Tokens invalidate on track change;
+    // first 'playing' event stands the ladder down.
+    everPlayedRef.current = false
+    clearLoadTimers()
+    loadTokenRef.current += 1
+    const myLoadToken = loadTokenRef.current
+    const armLoadStage = (delayMs: number, stage: 1 | 2 | 3): void => {
+      const t = window.setTimeout(() => {
+        if (myLoadToken !== loadTokenRef.current || everPlayedRef.current) return
+        const s = usePlayer.getState()
+        if (!s.isPlaying && !s.isLoading) return // user paused — never skip under them
+        const cur = s.queue[s.queueIndex]
+        if (!cur || cur.videoId !== track.videoId) return // stale timer for a previous track
+        if (stage === 1) {
+          usePlayer.getState().setError('Still connecting — this one is taking longer to load…')
+          return
+        }
+        if (stage === 2 && !freshRetryRef.current) {
+          // one cache-busting re-resolve before giving up on this stream
+          freshRetryRef.current = true
+          usePlayer.getState().setError('Refreshing the stream…')
+          pendingPlayRef.current = true
+          resumeAtRef.current = null
+          audio.src = `/api/stream?id=${encodeURIComponent(track.videoId)}${dur}${meta}&fresh=1${streamModeParam()}`
+          audio.load()
+          const p = audio.play()
+          if (p && typeof p.catch === 'function') p.catch(() => { /* retried on canplay */ })
+          armLoadStage(10_000, 3)
+          return
+        }
+        // budget spent — honest skip (engine-initiated, not a user skip)
+        usePlayer.getState().setError("This track didn't load — skipping ahead")
+        s.next({ auto: true })
+      }, delayMs)
+      loadTimersRef.current.push(t)
+    }
+    armLoadStage(9_000, 1)
+    armLoadStage(22_000, 2)
 
     // MINDBEAT: TRACK_START for the new track + the 10s heartbeat loop
     // (heartbeats fire only while playing — the getter returns null when paused).

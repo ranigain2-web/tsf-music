@@ -333,7 +333,7 @@ export function FullScreenNowPlaying() {
       <div className="relative flex-1 min-h-0 flex flex-col lg:flex-row lg:items-center lg:justify-center gap-6 px-6 lg:px-12 pb-12 max-lg:pb-[max(3rem,env(safe-area-inset-bottom))] pt-2">
         {/* album art (or lyrics overlay when lyrics open) — shrinks when the
             queue panel is open so the queue gets usable height on mobile */}
-        <div className={`flex items-center justify-center min-h-0 lg:flex-none ${queueOpen ? 'max-lg:flex-none max-lg:h-[160px]' : 'flex-1'}`}>
+        <div className={`flex items-center justify-center min-h-0 lg:flex-none lg:h-full ${queueOpen ? 'max-lg:flex-none max-lg:h-[160px]' : 'flex-1'}`}>
           {lyricsOpen ? (
             <SyncedLyrics track={track} />
           ) : queueOpen ? (
@@ -348,7 +348,7 @@ export function FullScreenNowPlaying() {
               <img
                 src={bigArt}
                 alt={track.title}
-                className="h-full aspect-square object-cover rounded-md shadow-[0_24px_80px_rgba(0,0,0,0.85)]"
+                className="max-h-full max-w-full aspect-square object-cover rounded-md shadow-[0_24px_80px_rgba(0,0,0,0.85)] lg:w-[min(520px,54vh)] lg:h-[min(520px,54vh)] xl:w-[min(560px,58vh)] xl:h-[min(560px,58vh)]"
                 referrerPolicy="no-referrer"
               />
             </motion.div>
@@ -364,15 +364,19 @@ export function FullScreenNowPlaying() {
               <img
                 src={bigArt}
                 alt={track.title}
-                className={`max-w-full max-h-full lg:w-[520px] lg:h-[520px] xl:w-[600px] xl:h-[600px] aspect-square object-cover rounded-md shadow-[0_24px_80px_rgba(0,0,0,0.85)] ${isPlaying ? 'tsf-breathe' : ''}`}
+                className={`max-w-full max-h-full lg:w-[min(520px,56vh)] lg:h-[min(520px,56vh)] xl:w-[min(600px,62vh)] xl:h-[min(600px,62vh)] aspect-square object-cover rounded-md shadow-[0_24px_80px_rgba(0,0,0,0.85)] ${isPlaying ? 'tsf-breathe' : ''}`}
                 referrerPolicy="no-referrer"
               />
             </motion.div>
           )}
         </div>
 
-        {/* right column: title + controls */}
-        <div className={`lg:flex-none lg:w-[480px] xl:w-[560px] flex flex-col gap-5 min-h-0 ${queueOpen ? 'max-lg:flex-[2.2]' : 'flex-1'}`}>
+        {/* right column: title + controls. lg:h-full HEIGHT-BINDS the column
+            so the queue panel below can never overflow the overlay (the
+            "text overlapping the header" glitch: an unconstrained flex-none
+            column grew to content height and slid its header over the NP
+            chrome above the viewport). */}
+        <div className={`lg:flex-none lg:w-[480px] xl:w-[560px] lg:h-full flex flex-col gap-5 min-h-0 ${queueOpen ? 'max-lg:flex-[2.2]' : 'flex-1 lg:justify-center'}`}>
           {/* title row */}
           <div className="flex items-end gap-4">
             <div className="min-w-0 flex-1">
@@ -477,8 +481,10 @@ export function FullScreenNowPlaying() {
           </div>
 
           {/* bottom row: lyrics / queue / save / smart — wraps on phones,
-              volume controls are desktop-only (phones use hardware volume) */}
-          <div className="flex flex-wrap items-center justify-start lg:justify-between gap-2 pt-2">
+              volume controls are desktop-only (phones use hardware volume).
+              Desktop keeps ONE row: PiP only from 2xl, slider w-24 (the wrap
+              that dropped PiP to a second line at 1280px read as a glitch). */}
+          <div className="flex flex-wrap lg:flex-nowrap items-center justify-start lg:justify-between gap-2 pt-2">
             <button
               onClick={toggleLyrics}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors border ${
@@ -566,11 +572,11 @@ export function FullScreenNowPlaying() {
               max={100}
               step={1}
               onValueChange={(v) => setVolume(v[0] / 100)}
-              className="hidden lg:flex w-28 h-1 [&_[data-slot=slider-range]]:bg-white [&_[data-slot=slider-thumb]]:opacity-0 hover:[&_[data-slot=slider-thumb]]:opacity-100 hover:[&_[data-slot=slider-range]]:bg-[#1ed760]"
+              className="hidden lg:flex w-24 h-1 [&_[data-slot=slider-range]]:bg-white [&_[data-slot=slider-thumb]]:opacity-0 hover:[&_[data-slot=slider-thumb]]:opacity-100 hover:[&_[data-slot=slider-range]]:bg-[#1ed760]"
               aria-label="Volume"
             />
             <button
-              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-white/30 text-white/80 hover:border-white transition-colors"
+              className="hidden 2xl:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-white/30 text-white/80 hover:border-white transition-colors"
               aria-label="Picture in picture"
               title="Picture in picture"
             >
@@ -578,9 +584,11 @@ export function FullScreenNowPlaying() {
             </button>
           </div>
 
-          {/* queue / lyrics panel underneath (when toggled) */}
+          {/* queue / lyrics panel underneath (when toggled) — SOLID panel:
+              the translucent bg-black/40 let the artwork + chrome bleed
+              through behind queue text (read as glitchy overlap). */}
           {queueOpen && (
-            <div className="mt-1 flex-1 min-h-0">
+            <div className="mt-1 flex-1 min-h-0 rounded-lg bg-[#121212] border border-white/10 overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.5)]">
               <QueuePanel />
             </div>
           )}

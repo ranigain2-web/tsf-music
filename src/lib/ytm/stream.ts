@@ -714,6 +714,17 @@ export async function resolveStream(
       innertubeClients = ['IOS', ...innertubeClients]
     }
 
+    // 2b. ADAPTIVE FAIR-WAIT ("stuck loading" fix): count how many wave-1
+    //    probes will actually RUN (not be cooldown-skipped). When the circuit
+    //    breaker says every provider is dead (fully-walled networks), waiting
+    //    the full 14s for yt-dlp just spins the player — settle fast, let the
+    //    background yt-dlp warm the cache for the NEXT play instead.
+    const pipedAlive = PIPED_INSTANCES.some((b) => !inCooldown(`piped-${new URL(b).hostname}`))
+    const invidiousAlive = INVIDIOUS_INSTANCES.some((b) => !inCooldown(`invidious-${new URL(b).hostname}`))
+    const wave1RealProbes =
+      (title ? 1 : 0) + innertubeClients.length + (pipedAlive ? 1 : 0) + (invidiousAlive ? 1 : 0)
+    const fairWaitMs = wave1RealProbes > 1 ? YTDLP_FAIR_WAIT_MS : 4_500
+
     // 3. yt-dlp — started concurrently with wave 1. Even if wave 1 or the
     //    fair-wait window answers first, the background .then() warms the
     //    cache so the NEXT play of this track is full-length instantly.
@@ -746,8 +757,10 @@ export async function resolveStream(
     let full = await wave1
 
     // 5. Fair wait for yt-dlp before settling for a preview (fix #2).
+    //    Adaptive: walled-everything networks settle in ~4.5s (first byte
+    //    ≤ ~8s total), healthy networks still give yt-dlp its full window.
     if (!full) {
-      full = await raceTimeout(ytdlpWarm, YTDLP_FAIR_WAIT_MS)
+      full = await raceTimeout(ytdlpWarm, fairWaitMs)
     }
 
     if (full) {

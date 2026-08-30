@@ -26,9 +26,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveStream, purgeVideoId } from '@/lib/ytm/stream'
 import { VIDEO_ID_RE } from '@/lib/ytm/ytdlp'
+import { resolveSaavnById } from '@/lib/ytm/jiosaavn'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
+
+/** F1 pagination rows: `saavn-<id>` resolves by catalog id (no YT wall). */
+const SAAVN_ID_RE = /^saavn-[a-zA-Z0-9_-]{4,20}$/
 
 function isAllowedUpstream(url: string): boolean {
   try {
@@ -79,8 +83,45 @@ export async function GET(req: NextRequest) {
   const proxy = searchParams.get('proxy') === '1'
 
   if (!videoId) return new Response('missing id', { status: 400 })
-  // Malformed ids never reach a provider or a subprocess argv.
-  if (!VIDEO_ID_RE.test(videoId)) return new Response('malformed id', { status: 400 })
+  // Malformed ids never reach a provider or a subprocess argv. saavn-<id>
+  // rows (F1 search pagination) resolve by catalog id instead.
+  if (!VIDEO_ID_RE.test(videoId) && !SAAVN_ID_RE.test(videoId)) {
+    return new Response('malformed id', { status: 400 })
+  }
+
+  // 1b. JioSaavn catalog-id resolve — deterministic full-length 320 kbps.
+  if (SAAVN_ID_RE.test(videoId)) {
+    if (isHead) {
+      const h = new Headers({ 'X-Stream-Provider': 'jiosaavn' })
+      h.set('Content-Length', '0')
+      h.set('Accept-Ranges', 'bytes')
+      return new Response(null, { status: 200, headers: h })
+    }
+    const saavn = await resolveSaavnById(videoId)
+    if (saavn) {
+      const meta: Record<string, string> = {
+        'X-Stream-Provider': 'jiosaavn',
+        'X-Stream-Bitrate': String(saavn.bitrate),
+      }
+      if (saavn.artUrl) meta['X-Stream-Art'] = saavn.artUrl
+      if (proxy) {
+        const piped = await pipeUpstream(saavn.url, range, 'jiosaavn', saavn.userAgent)
+        if (piped) {
+          const headers = new Headers(piped.headers)
+          headers.set('X-Stream-Provider', 'jiosaavn')
+          if (saavn.bitrate) headers.set('X-Stream-Bitrate', String(saavn.bitrate))
+          return new Response(piped.body, { status: piped.status, headers })
+        }
+        return new Response('upstream failed', { status: 502 })
+      }
+      const headers = new Headers(meta)
+      headers.set('Cache-Control', 'no-store')
+      return NextResponse.redirect(saavn.url, { headers })
+    }
+    // catalog row died (removed/region) — honest 404, the player's recovery
+    // ladder will skip ahead (no synth masquerade for a REAL catalog row).
+    return new Response('unavailable', { status: 404 })
+  }
 
   // 1. client-resolved URL passthrough — 307 redirect (audio <audio> fetches directly)
   if (clientUrl && isAllowedUpstream(clientUrl)) {

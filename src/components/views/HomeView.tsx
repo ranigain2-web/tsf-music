@@ -17,15 +17,15 @@
  * the user's onboarding selections.
  */
 
-import { useEffect, useRef, useState } from 'react'
-import { Play, Sparkles, Wand2, Compass, Satellite, AlarmClock, Repeat2, Mic2, BookOpenText, type LucideIcon } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Play, Sparkles, Wand2, Compass, Satellite, AlarmClock, Repeat2, Mic2, BookOpenText, Loader2, RotateCcw, Infinity as InfinityIcon, type LucideIcon } from 'lucide-react'
 import { usePlayer, type PlayerTrack } from '@/store/player'
 import { api, useNav } from '@/store/nav'
 import { useLibrary } from '@/store/library'
 import { usePreferences } from '@/store/preferences'
 import { markQueueSource, shelfExposure } from '@/lib/mindbeat/client'
 import type { SourceSurface } from '@/lib/mindbeat/types'
-import { Shelf, AlbumCard, ArtistCard } from '@/components/shared'
+import { Shelf, AlbumCard, ArtistCard, TrackRow } from '@/components/shared'
 import { Artwork } from '@/components/Artwork'
 import { AiPlaylistGenerator } from '@/components/ai/AiPlaylistGenerator'
 import type { YtmShelf } from '@/lib/ytm/parse'
@@ -130,6 +130,130 @@ export function HomeView() {
   const likedTracks = useLibrary((s) => s.likedTracks)
   const push = useNav((s) => s.push)
   const prefs = usePreferences()
+
+  // ---- F2 · ENDLESS FEED (reference v3.4.1 port) --------------------------
+  // The Spotify-style scroll-forever tail of Home: alternating songs/albums
+  // batches from rotating query ladders, deduped against everything the
+  // shelves already show, honest exhaustion/retry states (never call again
+  // after the server says done).
+  interface FeedSongRow { videoId: string; title: string; artistName: string; duration: number; thumbnail: string }
+  interface FeedAlbumRow { id: string; name: string; artist?: string; thumbnail: string; year?: number }
+  type FeedBatchRow =
+    | { kind: 'songs'; title: string; rows: FeedSongRow[] }
+    | { kind: 'albums'; title: string; rows: FeedAlbumRow[] }
+  const [feedBatches, setFeedBatches] = useState<FeedBatchRow[]>([])
+  const [feedStatus, setFeedStatus] = useState<'idle' | 'loading' | 'ready' | 'retry' | 'done'>('idle')
+  const feedSessionRef = useRef<string | null>(null)
+  const feedBusyRef = useRef(false)
+  // IntersectionObserver pitfall guard: if the sentinel fires while a fetch
+  // is in flight, the event is DROPPED and (the element staying in view)
+  // never re-fires — queue exactly one pending fetch and chain it in finally.
+  const feedPendingRef = useRef(false)
+  const feedSentinelRef = useRef<HTMLDivElement | null>(null)
+  const shelvesRef = useRef<AiHome['shelves']>([])
+
+  const fetchNextFeedBatch = useMemo(
+    () =>
+      async (mode: 'auto' | 'retry'): Promise<void> => {
+        if (feedBusyRef.current) {
+          feedPendingRef.current = true
+          return
+        }
+        feedBusyRef.current = true
+        setFeedStatus('loading')
+        try {
+          const seed =
+            feedSessionRef.current || mode === 'retry'
+              ? undefined
+              : {
+                  songIds: shelvesRef.current.flatMap((s) => (s.tracks ?? []).map((t) => t.videoId)).filter(Boolean),
+                  albumIds: shelvesRef.current.flatMap((s) => (s.albums ?? []).map((a) => a.browseId)).filter(Boolean),
+                }
+          const res = await api<{
+            batch: FeedBatchRow | { kind: 'retry' } | null
+            sessionKey: string
+            exhausted: boolean
+          }>('/api/ai/feed', {
+            method: 'POST',
+            body: JSON.stringify({
+              sessionKey: feedSessionRef.current ?? undefined,
+              seed,
+            }),
+          })
+          feedSessionRef.current = res.sessionKey
+          if (res.exhausted || res.batch === null) {
+            setFeedStatus('done')
+          } else if (res.batch.kind === 'retry') {
+            setFeedStatus('retry')
+          } else {
+            setFeedBatches((prev) => [...prev, res.batch as FeedBatchRow])
+            setFeedStatus('ready')
+          }
+        } catch {
+          setFeedStatus('retry')
+        } finally {
+          feedBusyRef.current = false
+          if (feedPendingRef.current) {
+            feedPendingRef.current = false
+            void fetchNextFeedBatch('auto')
+          }
+        }
+      },
+    [],
+  )
+
+  // Arm the feed once the home payload (shelves) is on screen — priming
+  // against the REAL visible ids so the tail never repeats them.
+  useEffect(() => {
+    if (!data?.shelves?.length || feedStatus !== 'idle') return
+    shelvesRef.current = data.shelves
+    void fetchNextFeedBatch('auto')
+  }, [data?.shelves, feedStatus, fetchNextFeedBatch])
+
+  // Preference change → the tail restarts cleanly. GUARD: prefs hydrate
+  // async (loaded flips after mount) — without a first-settled sentinel the
+  // reset fires AFTER the feed armed and wipes every appended batch.
+  const prefsSigRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!prefs.loaded) return
+    const sig = `${prefs.complete}|${prefs.artists.length}|${prefs.genres.length}`
+    if (prefsSigRef.current === null) {
+      prefsSigRef.current = sig
+      return
+    }
+    if (prefsSigRef.current === sig) return
+    prefsSigRef.current = sig
+    feedSessionRef.current = null
+    setFeedBatches([])
+    setFeedStatus('idle')
+  }, [prefs.loaded, prefs.complete, prefs.artists.length, prefs.genres.length])
+
+  // Sentinel — deterministic scroll check (throttled): when the tail marker
+  // comes within 600px of the container's bottom edge, fetch the next batch.
+  // The listener attaches to the APP-LEVEL scroll container (always exists)
+  // and reads the sentinel LAZILY at scroll time — the home refresh flips
+  // `loading` true and unmounts the feed block; an effect tied to the
+  // sentinel's mounting cleaned itself up and never re-armed (the silent
+  // feed-death bug this replaces).
+  useEffect(() => {
+    if (feedStatus === 'done' || feedStatus === 'idle') return
+    const container = document.querySelector('main .overflow-y-auto') as HTMLElement | null
+    if (!container) return
+    let last = 0
+    const onScroll = () => {
+      const now = Date.now()
+      if (now - last < 700) return
+      last = now
+      const el = feedSentinelRef.current
+      if (!el) return
+      const cr = container.getBoundingClientRect()
+      const er = el.getBoundingClientRect()
+      if (er.top < cr.bottom + 600) void fetchNextFeedBatch('auto')
+    }
+    onScroll() // already-in-view case (short pages)
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => container.removeEventListener('scroll', onScroll)
+  }, [feedStatus, fetchNextFeedBatch])
 
   useEffect(() => {
     if (!prefs.loaded) void prefs.load()
@@ -509,6 +633,78 @@ export function HomeView() {
           >
             Get started
           </button>
+        </div>
+      )}
+
+      {/* F2 · ENDLESS FEED — the scroll-forever tail (reference v3.4.1 port).
+          Alternating real songs / tappable albums from rotating ladders,
+          deduped against the shelves, honest retry + end states. */}
+      {!loading && (feedBatches.length > 0 || feedStatus === 'loading' || feedStatus === 'retry') && (
+        <div className="mt-2" data-feed-count={feedBatches.length} data-feed-status={feedStatus}>
+          {feedBatches.map((batch, bi) =>
+            batch.kind === 'songs' ? (
+              <section key={`f-${bi}`} className="px-4 lg:px-6 py-4 tsf-rise">
+                <h2 className="text-xl lg:text-2xl font-bold text-white tracking-tight">{batch.title}</h2>
+                <p className="text-[13px] text-[#a7a7a7] mt-0.5 mb-2">Fresh finds for endless listening</p>
+                <div className="max-h-[420px] overflow-y-auto hide-scrollbar pr-1">
+                  {batch.rows.map((t, i) => (
+                    <TrackRow
+                      key={t.videoId + '-' + bi + '-' + i}
+                      track={t as PlayerTrack}
+                      index={i}
+                      compact
+                      showAlbum={false}
+                      onPlay={() => {
+                        const list = batch.rows as unknown as PlayerTrack[]
+                        markQueueSource(list, 'endless_feed')
+                        playQueue(list, i, batch.title)
+                      }}
+                    />
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <Shelf
+                key={`f-${bi}`}
+                title="More albums to explore"
+                subtitle={batch.title !== 'More albums to explore' ? `Because you browse ${batch.title.toLowerCase()}` : 'Dig deeper — every card opens the full record'}
+              >
+                {batch.rows.map((a) => (
+                  <AlbumCard
+                    key={a.id}
+                    id={a.id}
+                    name={a.name}
+                    artist={a.artist}
+                    thumbnail={a.thumbnail}
+                    year={a.year}
+                  />
+                ))}
+              </Shelf>
+            ),
+          )}
+
+          {/* tail states — honest, never a fake forever */}
+          <div className="px-4 lg:px-6 py-6 flex flex-col items-center gap-2" ref={feedSentinelRef} data-render-s={feedStatus}>
+            {feedStatus === 'loading' && (
+              <div className="flex items-center gap-2 text-[13px] text-[#a7a7a7]">
+                <Loader2 size={14} className="animate-spin" /> Digging up more music…
+              </div>
+            )}
+            {feedStatus === 'retry' && (
+              <button
+                onClick={() => void fetchNextFeedBatch('retry')}
+                className="flex items-center gap-2 px-4 py-2 rounded-full text-[13px] text-white/80 border border-white/15 hover:border-white/40 transition-colors"
+              >
+                <RotateCcw size={13} /> Couldn&apos;t load more — retry
+              </button>
+            )}
+            {feedStatus === 'done' && (
+              <div className="flex items-center gap-2 text-[13px] text-[#a7a7a7] border-t border-white/5 pt-4">
+                <InfinityIcon size={14} className="text-[#1ed760]" aria-hidden />
+                You&apos;ve reached the end — tomorrow the feed digs again
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -928,3 +928,42 @@ Work Log:
 
 Stage Summary:
 - The mua47105-hue/TSF-MUSIC v3.4 feature set (Search V2 S0–S5 + YouTube source + title-truth rescue + lyric search + typeahead + honest zeros + Jump back in + What's New) is ported, verified end-to-end, and shipped as v0.3.0 for Mac Intel (plus arm64/Android/iOS). Everything the user asked — clone/understand A-to-Z, bars via gauntlet loop, E2E test, push, CI-watch to green — is done.
+
+---
+Task ID: 17-plan
+Agent: Z.ai Code (orchestrator)
+Task: GAUNTLET 17 — YouTube playback failures + queue-panel glitch + port mua47105-hue/TSF-MUSIC v3.4.1/2 updates (F1 search pagination + F2 endless home feed), E2E, push, CI-watch
+
+Work Log:
+- DIAGNOSIS (live, reproducible):
+  (1) YT "not playing / stuck loading": yt-dlp binary MISSING from /home/z/.venv/bin (provider 'no result', 3ms). Installed standalone 2026.08.19 + bgutil POT plugin; POT server mints tokens, but the player API is LOGIN_REQUIRED for ALL tokenless clients from THIS datacenter IP (VISIONOS/IOS/TVHTML5/mweb/web/tv_embedded/ANDROID_VR all probed). Residential Mac IPs are NOT walled the same way — hence "some videos play". End-to-end proof: /api/stream falls to tsf-synth for dC9QIUKviJU + 3JZ_D3ELwOFQ; all Piped/Invidious relays dead (525/403/000). "Stuck loading" = the 20-25s worst-case resolve (wave1 4s + yt-dlp fair-wait 14s + preview + synth) with NO client-side initial-load timeout — the 1Hz stall watchdog only counts while audio is actually playing, so the first load spins forever.
+  (2) Queue glitch REPRODUCED + captured (/tmp/np-queue-open.png): in Full-Screen Now Playing, QueuePanel overflows the overlay (measured 1151px tall in an 800px viewport, top:-1) because the right column is lg:flex-none (content height) — the panel header "NEXT FROM <ctx>" literally OVERLAPS the NP's "PLAYING FROM <ctx>" text. Also the pills row wraps (PiP drops to row 2 at 1280px).
+  (3) External repo delta: v3.4.1 = F1 (search infinite pagination, JioSaavn p+1, stale-gen guards, honest end) + F2 (EndlessFeedPager — rotating query ladders, songs/albums alternation, dedupe+prime, honest exhaustion, retry state) + tablet/orientation RN-only fixes (N/A web).
+
+GAUNTLET BARS:
+- BAR-YT: server /api/stream answers ≤20s worst case (adaptive fair-wait: providers-all-in-cooldown ⇒ ≤4s to first byte); client initial-load watchdog: no audio in 22s → one fresh re-resolve (8s) → honest error + engine-initiated auto-skip. Never an infinite spinner.
+- BAR-QUEUE: NP queue panel height-bounded at 1280×800/1440×900/390×844 (DOM geometry: panel bottom within viewport, header text does not overlap NP chrome), pills single row on desktop. Screenshot evidence.
+- BAR-F1: catalog search appends a fresh deduped page on scroll sentinel; honest "End of results" (catalog) / "That's everything YouTube found" (YT); V2 engine untouched.
+- BAR-F2: Home feed tail appends ≥2 alternating songs/albums batches on scroll, deduped against shelves, honest exhaustion marker; retry state on transient failure.
+- BAR-OPS: lint 0; tsc src clean; push; macOS/Android/iOS workflows green.
+
+---
+Task ID: 17-ship
+Agent: Z.ai Code (orchestrator — all fixes and features implemented directly)
+Task: Wave 17 execution — YT playback fixes + queue glitch fix + F1/F2 ports, E2E verify, push, CI
+
+Work Log:
+- YT FIXES (root causes found live):
+  (1) yt-dlp binary was MISSING (/home/z/.venv/bin/yt-dlp gone) → installed standalone 2026.08.19 + bgutil POT plugin (~/.config/yt-dlp/plugins). POT server mints tokens, but this sandbox's datacenter IP is now FULLY player-API-walled (VISIONOS/IOS/TVHTML5/mweb/web/tv_embedded/ANDROID_VR all LOGIN_REQUIRED; all Piped/Invidious relays 525/403/000). Residential Macs are NOT walled the same — hence "some videos play for me".
+  (2) SERVER: adaptive fair-wait in resolveStream (src/lib/ytm/stream.ts) — counts wave-1 probes that will actually run (circuit-breaker-aware); all-dead ⇒ settle in 4.5s instead of 14s. Measured: walled videoId now answers ~9s total (was 20-25s+), healthy networks keep the full yt-dlp window.
+  (3) CLIENT: INITIAL-LOAD WATCHDOG in AudioEngine — the 1Hz stall watchdog only sampled while PLAYING; the first load had no deadline (infinite spinner). Ladder: 9s honest "Still connecting…" hint → 22s one cache-busting fresh re-resolve (+10s) → ~32s honest engine-initiated skip. Token-guarded (track changes invalidate), stands down on first 'playing'.
+  (4) The engine's honest status text was SET but NEVER RENDERED anywhere — added a transient status pill (aria-live, auto-clear 7s) above the player bar in NowPlayingBar.
+- QUEUE GLITCH (reproduced + fixed): in Full-Screen Now Playing the QueuePanel overflowed the overlay (measured 1151px in an 800px viewport, top:-1) because the right column was lg:flex-none (content height) — the panel header literally overlapped the NP "PLAYING FROM" chrome. Fix: lg:h-full height-binds the right column; queue wrapper gets solid bg/border/overflow-hidden (no artwork bleed); artwork clamped to min(520-560px, 54-58vh); pills row lg:flex-nowrap with PiP 2xl+ and w-24 slider (no more PiP wrap at 1280px). Verified DOM geometry: panelTop 360, bottom 606 in 800px viewport, zero overlap, desktop + mobile (390px) screenshots.
+- F1 SEARCH INFINITE PAGINATION (reference v3.4.1 port, adapted): the reference appends JioSaavn pages — SO DO WE, but every appended row is PLAYABLE: new `saavn-<id>` videoId scheme + resolveSaavnById (song.getDetails → DES decrypt → 320kbps upgrade → probe) in the stream route (deterministic catalog-id resolve, no YT wall). /api/ytm/search-more (page 2+) dedupes vs caller-seen ids, muted-artist parity via loadCorrections, language-gate parity, <25% fresh ⇒ honest end, transient failure ⇒ {error:true} retry (never the end). useSearchV2.loadMore + page-cursor + live rows mirror; SearchView sentinel + "End of results" / "That's everything YouTube found" / retry states. YTM InnerTube search has NO continuations (probed unfiltered/videos/newer client — all null) hence the JioSaavn-pivot.
+- F2 ENDLESS HOME FEED (reference v3.4.1 EndlessFeedPager ported as src/lib/ai/endless-feed.ts): rotating song/album query ladders with per-query InnerTube continuation memory (songs filter + ALBUMS filter), songs→albums alternation, dedupe + prime(shelf ids), MAX_LADDER_PASSES exhaustion budget, retry state on transient failure, honest end. Sessions server-side (globalThis map, 30min TTL, LRU 200). /api/ai/feed POST {sessionKey?, seed} → {batch|null, sessionKey, exhausted}. HomeView: feed tail after shelves (songs = TrackRow lists, albums = Shelf of AlbumCards), 'endless_feed' registered as a SourceSurface with markQueueSource attribution.
+- F2 BUGS FOUND AND FIXED IN QA: (a) albums fetcher was using the SONGS filter (no album cards in songs response) → searchPage gained a filter param; (b) IntersectionObserver sentinel silently died when the home refresh (loading=true) unmounted the feed block — effect cleanup removed it, re-run early-returned (el null), deps never re-fired → replaced with a container-attached throttled scroll check reading the sentinel lazily; (c) prefs hydration (loaded flip) re-triggered the reset effect and WIPED appended batches — reset now guards with a first-settled signature.
+- VERIFY: lint 0; tsc clean in src/; BAR-ENGINE oracle 29/29 (no V2 regression). Live E2E: feed batches alternate (songs→albums→songs, screenshots); search "tum hi ho" pagination deep-scrolled to 532 rows with honest "End of results"; played the last saavn row from the UI → /api/stream?id=saavn-b4p2XiM4 → 206 in 729ms (real 320kbps audio); NP queue zero-overlap at 1280×800 + 390×844; walled YT-source track honestly resolved to a labeled "30s preview" badge within bounds; status pill machinery live. Screenshots: tsf-analysis/qa/t17-*.png (6).
+- MAC Intel build path untouched (app-level code only); probe gates unchanged.
+
+Stage Summary:
+- The three user-reported problems are fixed at the root: YouTube "not playing / stuck loading" now has a bounded resolution path with honest in-UI status + auto-skip (plus yt-dlp restored + POT plugin installed so residential-Mac full-length playback gets its primary provider back); the Now Playing queue panel can no longer overflow/overlap; the external repo's v3.4.1 feature set (search pagination + endless home feed) is ported with every row playable. Push + CI watch next.
