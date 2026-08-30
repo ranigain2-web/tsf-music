@@ -967,3 +967,17 @@ Work Log:
 
 Stage Summary:
 - The three user-reported problems are fixed at the root: YouTube "not playing / stuck loading" now has a bounded resolution path with honest in-UI status + auto-skip (plus yt-dlp restored + POT plugin installed so residential-Mac full-length playback gets its primary provider back); the Now Playing queue panel can no longer overflow/overlap; the external repo's v3.4.1 feature set (search pagination + endless home feed) is ported with every row playable. Push + CI watch next.
+
+---
+Task ID: 17-ci
+Agent: Z.ai Code (orchestrator)
+Task: CI watch + v0.3.1 release
+
+Work Log:
+- Push c61fe93 → macOS App workflow: check ✓, probe ✓ (20-track playback gate against the wave-17 stream changes), build x86_64 (Intel DMG) ✓, build aarch64 ✓ — zero errors. Android/iOS correctly skipped (src-only push; documented path filters — shells load the app at runtime).
+- Version coherence 0.3.1 across package.json / tauri.conf.json / Cargo.toml+lock / gradle (versionCode 4) → commit bc61db4, tag v0.3.1.
+- ALL THREE platform workflows completed SUCCESS on the tag; RELEASE v0.3.1 published: TSF-Music-0.3.1-x64.dmg (269MB, Intel i9 target) + -arm64.dmg (266MB) + zips + app-release-unsigned.apk + tsf-music-ios-unsigned.ipa.
+- 15-min gauntlet watchdog (webDevReview cron 347145) remains active for continuous loop.
+
+Stage Summary:
+- WAVE 17 SHIPPED. YouTube section: root-caused (missing yt-dlp + hardened datacenter wall) and hardened (restored extractor chain, adaptive fair-wait ≤~9s walled answers, client initial-load watchdog 9s/22s/32s with honest status pill + engine-initiated skip — the infinite spinner is structurally impossible). Queue glitch: root-caused (unconstrained flex-none column → 1151px overflow + header text overlap) and fixed (lg:h-full bind + solid panel + clamped art + single-row pills), verified by DOM geometry + screenshots at 1280×800 and 390×844. mua47105-hue v3.4.1 updates ported: F1 search infinite pagination (playable saavn-<id> catalog rows via deterministic DES-decrypt stream resolve — no YouTube wall) and F2 endless home feed (songs/albums ladder pager, server sessions, honest retry/end states). All gauntlet bars met with live evidence; release live on GitHub.
