@@ -12,6 +12,8 @@ import { useNav } from '@/store/nav'
 export function TopBar() {
   const view = useNav((s) => s.view)
   const pop = useNav((s) => s.pop)
+  const replace = useNav((s) => s.replace)
+  const liveReplaceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stack = useNav((s) => s.stack)
   const push = useNav((s) => s.push)
   const [scrolled, setScrolled] = useState(false)
@@ -80,7 +82,17 @@ export function TopBar() {
           <input
             ref={inputRef}
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value)
+              // LIVE SEARCH (reference repo v3.3 behavior): typing updates the
+              // search view in place (replace, never history spam) — the
+              // typeahead rail + debounced results react per keystroke.
+              if (liveReplaceTimer.current) clearTimeout(liveReplaceTimer.current)
+              const v = e.target.value
+              liveReplaceTimer.current = setTimeout(() => {
+                if (v.trim()) replace({ type: 'search', q: v.trim() })
+              }, 250)
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && q.trim()) {
                 push({ type: 'search', q: q.trim() })

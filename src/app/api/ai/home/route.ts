@@ -71,10 +71,33 @@ function insertShelfAt(shelves: (YtmShelf & { id?: string })[], shelf: YtmShelf 
 }
 
 async function attachPlanShelves(home: AiHome): Promise<AiHome> {
-  const [nsRes, otrRes] = await Promise.allSettled([
+  // Jump back in (reference repo's deep-Home feed): the user's own recent
+  // listens as the second shelf — evidence of "it remembers" with zero
+  // intelligence cost. Read-only over the history table; omitted on error.
+  const jumpBackIn = (async () => {
+    try {
+      const items = await db.historyItem.findMany({
+        orderBy: { playedAt: 'desc' },
+        take: 30,
+        include: { track: true },
+      })
+      const seen = new Set<string>()
+      const tracks = items
+        .filter((i) => (seen.has(i.trackId) ? false : (seen.add(i.trackId), true)))
+        .map((i) => trackToPlayer(i.track))
+        .filter((t): t is NonNullable<ReturnType<typeof trackToPlayer>> => !!t?.videoId)
+      return tracks.length >= 4 ? tracks.slice(0, 10) : null
+    } catch {
+      return null
+    }
+  })()
+
+  const [nsRes, otrRes, jbiRes] = await Promise.allSettled([
     buildNowSound(),
     buildOnTheRise(),
+    jumpBackIn,
   ])
+  let inserted = 0
   if (nsRes.status === 'fulfilled' && nsRes.value.tracks.length) {
     const ns = nsRes.value
     home.shelves = insertShelfAt(
@@ -82,13 +105,22 @@ async function attachPlanShelves(home: AiHome): Promise<AiHome> {
       { id: 'now-sound', title: ns.title, subtitle: ns.subtitle, tracks: ns.tracks },
       1 // first music shelf after "Your top artists"
     )
+    inserted++
+  }
+  if (jbiRes.status === 'fulfilled' && jbiRes.value) {
+    home.shelves = insertShelfAt(
+      home.shelves,
+      { id: 'jump-back-in', title: 'Jump back in', subtitle: 'Your recent listens', tracks: jbiRes.value },
+      1 + inserted // right after Now Sound
+    )
+    inserted++
   }
   if (otrRes.status === 'fulfilled' && otrRes.value.tracks.length) {
     const otr = otrRes.value
     home.shelves = insertShelfAt(
       home.shelves,
       { id: 'on-the-rise', title: otr.name, subtitle: `Anchored by ${otr.seed.artistName}`, tracks: otr.tracks },
-      2 // right after the Now Sound shelf
+      1 + inserted // right after the shelves above
     )
   }
   return home
