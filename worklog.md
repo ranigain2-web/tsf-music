@@ -889,3 +889,28 @@ Work Log:
 
 Stage Summary:
 - WAVE 16 COMPLETE — the mua47105-hue/TSF-MUSIC (RN v3.4) features now live in the Mac Intel web edition: Search V2 (S0–S5) engine + YouTube source + title-truth rescue + lyric search + typeahead + honest zeros + Jump back in + What's New, ported onto our providers/ledger/design system. Gauntlet bars met with hard evidence; CI on the new push must stay green to close the loop.
+
+---
+Task ID: 16-ci
+Agent: Z.ai Code (orchestrator)
+Task: CI investigation + v0.3.0 release tagging
+
+Work Log:
+- Observed only macOS App triggering on src-only pushes; investigated all three workflow `on:` blocks. A display artifact made `branches: [main]` read as `branches: ain]` in several tool outputs — byte-level python verification proved the YAML was NEVER corrupted: HEAD efee515 + GitHub raw both contain `branches: [main]`, zero corrupted patterns. No fix needed; no commit.
+- The real (correct) behavior: android.yml/ios.yml path-filter on android/**+mobile-shell/**+capacitor.config.json and ios/** respectively — the APK/IPA shells load the app from the server at runtime, so src-only pushes legitimately skip them (documented in the workflow headers). macOS (paths src/**) correctly built wave 16 on main → COMPLETED SUCCESS (probe gate passed on the Search V2 code).
+- Tagged v0.3.0 on efee515 and pushed → all three platform workflows kicked off on the tag (macOS publishes DMGs to a GitHub Release gated by the probe job; Android publishes signed APKs; iOS publishes the unsigned IPA). Watching to green.
+
+Stage Summary:
+- v0.3.0 release pipeline running on all three platforms; macOS main build already green pre-tag.
+
+---
+Task ID: 16-rel
+Agent: Z.ai Code (orchestrator)
+Task: v0.3.0 version coherence + re-tag
+
+Work Log:
+- v0.3.0 release published green on all three workflows, but DMG names still said 0.1.1 (the Tauri app version had never been bumped since v0.1.1). Bumped for release coherence: src-tauri/tauri.conf.json 0.1.1→0.3.0, src-tauri/Cargo.toml + Cargo.lock (tsf-music-desktop) →0.3.0, android/app/build.gradle versionName 1.0→0.3.0 (versionCode 1→3), package.json already 0.3.0. iOS version is baked by Capacitor config at build time.
+- Committing and moving the v0.3.0 tag to this commit → all three workflows rebuild with coherent 0.3.0 artifact names.
+
+Stage Summary:
+- Release artifacts will carry the true 0.3.0 version across DMG/APK names.
