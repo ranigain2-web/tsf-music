@@ -26,6 +26,7 @@ export type EventType = (typeof EVENT_TYPES)[number]
 export const SOURCE_SURFACES = [
   'user_playlist', 'user_queue', 'search', 'chart', 'daily_mix', 'smart_shuffle_rec',
   'radio', 'ai_playlist', 'daylist', 'discovery', 'onboarding', 'liked', 'album', 'artist',
+  'endless_feed',
 ] as const
 export type SourceSurface = (typeof SOURCE_SURFACES)[number]
 

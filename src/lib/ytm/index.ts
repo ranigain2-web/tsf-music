@@ -134,6 +134,61 @@ export async function search(query: string, filter?: keyof typeof SEARCH_FILTERS
   }
 }
 
+// ---------- search pagination (F1, ported from the reference v3.4.1) ------
+
+export interface SearchPage {
+  tracks: YtmTrack[]
+  albums: YtmAlbum[]
+  artists: YtmArtist[]
+  /** InnerTube continuation token for the NEXT page — absent = honest end. */
+  continuation?: string
+  offline: boolean
+}
+
+/**
+ * One page of the catalog search — page 1 (songs filter, canonical
+ * playable list) or any continuation page. The continuation token encodes
+ * the shelf context; requests carry query + token (InnerTube contract).
+ * Never throws — a failed page degrades to an empty one and the UI shows
+ * its honest retry/end state.
+ */
+export async function searchPage(
+  query: string,
+  continuation?: string,
+  filter: keyof typeof SEARCH_FILTERS = 'songs',
+): Promise<SearchPage> {
+  if (!query.trim()) return { tracks: [], albums: [], artists: [], offline: false }
+  try {
+    const body: Record<string, unknown> = continuation
+      ? { query, continuation }
+      : { query, params: SEARCH_FILTERS[filter] }
+    const res = await ytmFetch<any>('search', body, { cacheTtlMinutes: 10 })
+    const parsed = parseSearch(res)
+    // Continuation lives in one of three shapes depending on response
+    // variant — take the first string we can find.
+    const rawCont =
+      res?.continuationContents?.continuationNextPage?.continuation ??
+      res?.continuationContents?.sectionListContinuation?.continuation
+    const cont =
+      typeof rawCont === 'string'
+        ? rawCont
+        : Array.isArray(rawCont)
+          ? rawCont?.[0]?.nextContinuationData?.continuation
+          : undefined
+    const safeTracks = filterSafeTracks(parsed.tracks)
+    void persistTracks(safeTracks).catch(() => {})
+    return {
+      tracks: safeTracks,
+      albums: (parsed.albums || []).filter((a) => isShelfTitleSafe(a.name + ' ' + (a.artistName || ''))),
+      artists: (parsed.artists || []).filter((a) => isShelfTitleSafe(a.name)),
+      continuation: typeof cont === 'string' && cont.length > 8 ? cont : undefined,
+      offline: false,
+    }
+  } catch {
+    return { tracks: [], albums: [], artists: [], offline: true }
+  }
+}
+
 // ---------- home ----------
 
 /** Curated shelves built from search (region-proof, English). */

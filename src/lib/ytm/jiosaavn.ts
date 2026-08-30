@@ -273,3 +273,65 @@ export async function resolveJioSaavn(
     return null
   }
 }
+
+// ---------- direct id resolve (F1 pagination rows) ----------
+
+/**
+ * Resolve a JioSaavn track BY ID (search-more pagination rows carry
+ * `saavn-<id>` as their videoId). Deterministic — no title matching:
+ * song.getDetails → encrypted_media_url → DES decrypt → 320 kbps upgrade →
+ * probe. Full-length evergreen CDN objects, same as the title-matched path.
+ */
+export async function resolveSaavnById(saavnId: string): Promise<StreamResult | null> {
+  const id = saavnId.replace(/^saavn-/, '')
+  if (!/^[a-zA-Z0-9_-]{4,20}$/.test(id)) return null
+  const memo = memGet(`byid|${id}`)
+  if (memo !== undefined) return memo
+  try {
+    const q = new URLSearchParams({
+      __call: 'song.getDetails',
+      pids: id,
+      _format: 'json',
+      _marker: '0',
+      api_version: '4',
+      ctx: 'web6dot0',
+    })
+    const res = await fetch(`${API}?${q.toString()}`, {
+      headers: HEADERS,
+      signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const j: any = await res.json()
+    const song = j?.[id] ?? (j?.songs && j.songs[0])
+    const mi = song?.more_info ?? {}
+    const enc = String(mi.encrypted_media_url ?? '')
+    if (!enc) {
+      memSet(`byid|${id}`, null)
+      return null
+    }
+    const base = decryptMediaUrl(enc)
+    if (!base.startsWith('http')) {
+      memSet(`byid|${id}`, null)
+      return null
+    }
+    const allow320 = String(mi['320kbps'] ?? '') === 'true' || mi['320kbps'] === true
+    let url = upgradeBitrate(base, allow320)
+    if (url !== base && !(await verifyUrl(url))) url = base
+    if (!(await verifyUrl(url))) {
+      memSet(`byid|${id}`, null)
+      return null
+    }
+    const result: StreamResult = {
+      url,
+      provider: 'jiosaavn',
+      bitrate: url.includes('_320.') ? 320000 : 96000,
+      expiresAt: Date.now() + MATCH_TTL_MS,
+      mime: 'audio/mp4',
+      artUrl: upgradeArt(String(song?.image ?? '')) || undefined,
+    }
+    memSet(`byid|${id}`, result)
+    return result
+  } catch {
+    return null // network error — retry next time (no negative cache)
+  }
+}

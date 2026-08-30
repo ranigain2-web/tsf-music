@@ -29,7 +29,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Search, Play, Wand2, Sparkles, Clock3, X, AudioLines, Loader2, Music4, Youtube, Disc3, RefreshCw,
+  Search, Play, Wand2, Sparkles, Clock3, X, AudioLines, Loader2, Music4, Youtube, Disc3, RefreshCw, RotateCcw,
 } from 'lucide-react'
 import { usePlayer, type PlayerTrack } from '@/store/player'
 import { api, useNav } from '@/store/nav'
@@ -175,7 +175,6 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
     if (navView.type === 'search' && typeof navView.q === 'string' && navView.q && navView.q !== query) {
       setQuery(navView.q)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navView])
   const [mode, setMode] = useState<'keyword' | 'vibe'>('keyword')
   const [source, setSource] = useState<SearchSourceKey>('catalog')
@@ -193,6 +192,22 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
   const playQueue = usePlayer((s) => s.playQueue)
 
   const searchV2 = useSearchV2()
+  const { loadMore, more } = searchV2
+
+  // ---- F1 · sentinel: when the tail scrolls into view, append the next page
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void loadMore()
+      },
+      { rootMargin: '400px 0px' },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [loadMore, more.hasMore])
 
   const rememberRecent = useCallback((q: string) => {
     try {
@@ -286,7 +301,6 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
     setTa(null) // the rail yields to the running search (reference behavior)
     setRailDismissed(true)
     searchV2.run(debounced, source)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debounced, mode, source])
 
   // ── settle side-effects (once per generation): ledger SEARCH_QUERY +
@@ -299,7 +313,6 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
     const count = searchV2.state.final.rows?.length ?? 0
     searchQuery(debounced, count)
     rememberRecent(debounced)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchV2.gen, searchV2.state.phase, debounced])
 
   useEffect(() => {
@@ -852,6 +865,38 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
                           />
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {/* F1 · infinite-pagination tail — sentinel + honest states.
+                      Catalog appends continuation pages; YouTube/vibe are
+                      bounded sets and say so instead of pretending. */}
+                  {rows.length > 0 && (
+                    <div className="mt-4 pb-2">
+                      {more.loading && (
+                        <div className="flex items-center justify-center gap-2 py-3 text-[13px] text-[#a7a7a7]">
+                          <Loader2 size={14} className="animate-spin" /> Loading more results…
+                        </div>
+                      )}
+                      {!more.loading && more.note && (
+                        <div className="py-3 text-center text-[13px] text-[#a7a7a7] border-t border-white/5">
+                          {more.note}
+                        </div>
+                      )}
+                      {!more.loading && !more.note && more.error && (
+                        <button
+                          onClick={() => void searchV2.loadMore()}
+                          className="mx-auto flex items-center gap-2 py-2 px-4 rounded-full text-[13px] text-white/80 border border-white/15 hover:border-white/40 transition-colors"
+                        >
+                          <RotateCcw size={13} /> Retry loading more
+                        </button>
+                      )}
+                      {v2.phase === 'ready' && v2.source === 'youtube' && rows.length > 0 && !more.note && (
+                        <div className="py-3 text-center text-[13px] text-[#a7a7a7] border-t border-white/5">
+                          That&rsquo;s everything YouTube found
+                        </div>
+                      )}
+                      <div ref={sentinelRef} className="h-px w-full" aria-hidden />
                     </div>
                   )}
                 </>

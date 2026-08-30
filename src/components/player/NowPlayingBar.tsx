@@ -32,6 +32,7 @@ import { seekTo } from '@/store/audio'
 import { useLibrary } from '@/store/library'
 import { Slider } from '@/components/ui/slider'
 import SourceBadge from './SourceBadge'
+import { AlertTriangle } from 'lucide-react'
 
 export function NowPlayingBar() {
   const queue = usePlayer((s) => s.queue)
@@ -66,6 +67,20 @@ export function NowPlayingBar() {
   const [scrubbing, setScrubbing] = useState(false)
   const [scrubPos, setScrubPos] = useState(0)
   const barRef = useRef<HTMLDivElement>(null)
+
+  // ---- stream status surface ("stuck loading" companion fix) -------------
+  // The engine has always SET honest status text (stall recovery, load
+  // watchdog, skip-ahead) — but nothing ever RENDERED it. Surface it as a
+  // transient status pill above the player bar; auto-clears after 7s (the
+  // underlying states are transient: recovery lands, skip advances, or the
+  // next track resets the channel).
+  const streamStatus = usePlayer((s) => s.error)
+  const setStatus = usePlayer((s) => s.setError)
+  useEffect(() => {
+    if (!streamStatus) return
+    const t = setTimeout(() => setStatus(null), 7000)
+    return () => clearTimeout(t)
+  }, [streamStatus, setStatus])
 
   // Effective duration — falls back to track.metadata if audio element hasn't
   // fired durationchange yet (e.g., during the initial loading window).
@@ -117,6 +132,17 @@ export function NowPlayingBar() {
 
   return (
     <>
+      {/* honest stream-status pill — recovery/skip messages were invisible before */}
+      {streamStatus && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed z-[60] left-1/2 -translate-x-1/2 max-w-[92vw] flex items-center gap-2 px-3.5 py-2 rounded-full bg-[#282828] border border-white/10 shadow-xl text-xs text-white/90 select-none view-enter bottom-[calc(env(safe-area-inset-bottom)+9.75rem)] lg:bottom-[84px]"
+        >
+          <AlertTriangle size={13} className="text-[#ffa726] shrink-0" aria-hidden />
+          <span className="truncate">{streamStatus}</span>
+        </div>
+      )}
       {/* ================= MOBILE compact bar (Spotify mini-player) =================
        * BAR-B §2.2 anatomy: hairline progress on the top edge, art 48px +
        * title/artist + pause + next. Whole bar expands to Now Playing on tap.
