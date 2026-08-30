@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "TSF Music",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "identifier": "com.tsfmusic.desktop",
   "build": {
     "frontendDist": "www-fallback",
@@ -14,15 +14,20 @@
     "windows": [],
     "security": {
       "csp": null,
-      "capabilities": ["default"]
+      "capabilities": [
+        "default"
+      ]
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
+    "targets": [
+      "app",
+      "dmg"
+    ],
     "category": "Music",
     "shortDescription": "AI music player with full-length streaming",
-    "longDescription": "TSF Music — a Spotify-class AI music player. Full-length streaming via a bundled playback engine, AI playlists, radio, lyrics, queue and library — 100% local.",
+    "longDescription": "TSF Music \u2014 a Spotify-class AI music player. Full-length streaming via a bundled playback engine, AI playlists, radio, lyrics, queue and library \u2014 100% local.",
     "copyright": "TSF Music",
     "icon": [
       "icons/32x32.png",
