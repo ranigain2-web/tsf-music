@@ -48,12 +48,12 @@ const POT_PROVIDER_URL = process.env.TSF_POT_URL ?? 'http://127.0.0.1:4416'
  * copy (resources/bin/deno); the desktop shell also adds resources/bin to
  * PATH. Empty string = feature off.
  */
-const DENO_PATH = process.env.TSF_DENO_DIR ?? '/home/z/.deno/bin'
+const DENO_PATH = process.env.TSF_DENO_DIR ?? `${process.env.HOME ?? ''}/.deno/bin`
 
 const CANDIDATE_PATHS = [
   // explicit override (desktop shells can point straight at the bundled copy)
   ...(process.env.TSF_YTDLP_BIN ? [process.env.TSF_YTDLP_BIN] : []),
-  '/home/z/.venv/bin/yt-dlp', // sandbox venv install (plugin + POT provider live here)
+  `${process.env.HOME ?? ''}/.venv/bin/yt-dlp`, // sandbox venv install (plugin + POT provider live here)
   '/usr/local/bin/yt-dlp',
   '/opt/homebrew/bin/yt-dlp',
   '/usr/bin/yt-dlp',
