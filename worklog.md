@@ -981,3 +981,16 @@ Work Log:
 
 Stage Summary:
 - WAVE 17 SHIPPED. YouTube section: root-caused (missing yt-dlp + hardened datacenter wall) and hardened (restored extractor chain, adaptive fair-wait ≤~9s walled answers, client initial-load watchdog 9s/22s/32s with honest status pill + engine-initiated skip — the infinite spinner is structurally impossible). Queue glitch: root-caused (unconstrained flex-none column → 1151px overflow + header text overlap) and fixed (lg:h-full bind + solid panel + clamped art + single-row pills), verified by DOM geometry + screenshots at 1280×800 and 390×844. mua47105-hue v3.4.1 updates ported: F1 search infinite pagination (playable saavn-<id> catalog rows via deterministic DES-decrypt stream resolve — no YouTube wall) and F2 endless home feed (songs/albums ladder pager, server sessions, honest retry/end states). All gauntlet bars met with live evidence; release live on GitHub.
+
+---
+Task ID: 18
+Agent: Z.ai Code (orchestrator)
+Task: User request — "hand over the complete project, create a handover file with every info"
+
+Work Log:
+- Read worklog.md (983L, Tasks 1–17-ci) end-to-end, scanned all wave entries, gathered live state: git log/status (main@db19995, tags v0.1.0→v0.3.1), package.json (v0.3.1), prisma schema (19 models), workflow set (macos/android/ios/ci), mini-services (pot-provider :3030), src-tauri (lib.rs), store/component/view inventory, QA screenshot archive (tsf-analysis/qa/), script oracles (search-v2-check 29/29, cont-check).
+- Wrote /home/z/my-project/HANDOVER.md — the single-source complete handover: security/credentials table (PAT + repos + gateway config + POT plugin), mission charter, current-state snapshot (v0.3.1 green, watchdog cron 347145, datacenter-IP YouTube-wall reality), full architecture (stream resolve chain, /api/stream, InnerTube layer, AI engine + MINDBEAT, Search V2 S0–S5, endless feed, synth, client stores/engine/UI, design system, 19-model data model), feature inventory by wave (1→17), wave-17 deep detail, CI/CD + release procedure (4-place version bump, tag, probe gate), development runbook + sandbox hard rules + verification methodology, key-files map, honest known-issues/tech-debt list, roadmap (P0–P3), and the gauntlet-loop operating contract.
+- SECURITY: HANDOVER.md contains the GitHub PAT → added to .gitignore (git check-ignore verified IGNORED-OK). Never commit this file.
+
+Stage Summary:
+- Complete handover delivered: /home/z/my-project/HANDOVER.md (untracked by design) + worklog.md remains the wave-level journal. Project is at v0.3.1, all CI green, 15-min gauntlet watchdog still active. A new owner/session can start from HANDOVER.md §7 (runbook) and §10 (loop contract) with zero context loss.

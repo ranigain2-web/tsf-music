@@ -72,3 +72,4 @@ src-tauri/gen/schemas/
 *.dmg
 probe-report.json
 tool-results/
+HANDOVER.md
