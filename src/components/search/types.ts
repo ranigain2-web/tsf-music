@@ -74,6 +74,8 @@ export interface SearchV2Final {
   // youtube source extras
   ytUnavailable?: boolean
   source?: 'youtube'
+  /** InnerTube continuation for page 2+ (R8-P3 deep pagination) */
+  ytContinuation?: string | null
   // vibe extras (engine route's in-process delegation)
   vibe?: {
     shortcut: { prompt: string }

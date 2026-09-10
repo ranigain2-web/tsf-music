@@ -17,7 +17,7 @@
  * the user's onboarding selections.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Play, Sparkles, Wand2, Compass, Satellite, AlarmClock, Repeat2, Mic2, BookOpenText, Loader2, RotateCcw, Infinity as InfinityIcon, type LucideIcon } from 'lucide-react'
 import { usePlayer, type PlayerTrack } from '@/store/player'
 import { api, useNav } from '@/store/nav'
@@ -105,6 +105,60 @@ function shelfSurfaceForId(id: string): SourceSurface | null {
 function mixShelfId(mixId: string): string {
   return mixId.startsWith('dm-') ? `daily-mix-${mixId.slice(3)}` : mixId
 }
+
+// ── R8-P1 · memo'd endless-feed rows (deep-scroll lag fix) ──
+// Batches render off a data SNAPSHOT: appending batch N+1 never re-renders
+// batches 0..N (their props keep identity — the parent's setFeedBatches
+// spreads the old array, preserving each batch object). Without memo,
+// every append re-rendered every shelf above it and deep scrolling janked.
+interface FeedSongRowT { videoId: string; title: string; artistName: string; duration: number; thumbnail: string }
+interface FeedAlbumRowT { id: string; name: string; artist?: string; thumbnail: string; year?: number }
+
+const FeedSongsSection = memo(function FeedSongsSection({ title, rows }: { title: string; rows: FeedSongRowT[] }) {
+  const playQueue = usePlayer((s) => s.playQueue)
+  return (
+    <section className="px-4 lg:px-6 py-4 tsf-rise">
+      <h2 className="text-xl lg:text-2xl font-bold text-white tracking-tight">{title}</h2>
+      <p className="text-[13px] text-[#a7a7a7] mt-0.5 mb-2">Fresh finds for endless listening</p>
+      <div className="max-h-[420px] overflow-y-auto hide-scrollbar pr-1">
+        {rows.map((t, i) => (
+          <TrackRow
+            key={t.videoId + '-' + i}
+            track={t as PlayerTrack}
+            index={i}
+            compact
+            showAlbum={false}
+            onPlay={() => {
+              const list = rows as unknown as PlayerTrack[]
+              markQueueSource(list, 'endless_feed')
+              playQueue(list, i, title)
+            }}
+          />
+        ))}
+      </div>
+    </section>
+  )
+})
+
+const FeedAlbumsSection = memo(function FeedAlbumsSection({ title, rows }: { title: string; rows: FeedAlbumRowT[] }) {
+  return (
+    <Shelf
+      title="More albums to explore"
+      subtitle={title !== 'More albums to explore' ? `Because you browse ${title.toLowerCase()}` : 'Dig deeper — every card opens the full record'}
+    >
+      {rows.map((a) => (
+        <AlbumCard
+          key={a.id}
+          id={a.id}
+          name={a.name}
+          artist={a.artist}
+          thumbnail={a.thumbnail}
+          year={a.year}
+        />
+      ))}
+    </Shelf>
+  )
+})
 
 export function HomeView() {
   // ---- INSTANT PAINT (the "opening takes a while" fix) --------------------
@@ -643,43 +697,9 @@ export function HomeView() {
         <div className="mt-2" data-feed-count={feedBatches.length} data-feed-status={feedStatus}>
           {feedBatches.map((batch, bi) =>
             batch.kind === 'songs' ? (
-              <section key={`f-${bi}`} className="px-4 lg:px-6 py-4 tsf-rise">
-                <h2 className="text-xl lg:text-2xl font-bold text-white tracking-tight">{batch.title}</h2>
-                <p className="text-[13px] text-[#a7a7a7] mt-0.5 mb-2">Fresh finds for endless listening</p>
-                <div className="max-h-[420px] overflow-y-auto hide-scrollbar pr-1">
-                  {batch.rows.map((t, i) => (
-                    <TrackRow
-                      key={t.videoId + '-' + bi + '-' + i}
-                      track={t as PlayerTrack}
-                      index={i}
-                      compact
-                      showAlbum={false}
-                      onPlay={() => {
-                        const list = batch.rows as unknown as PlayerTrack[]
-                        markQueueSource(list, 'endless_feed')
-                        playQueue(list, i, batch.title)
-                      }}
-                    />
-                  ))}
-                </div>
-              </section>
+              <FeedSongsSection key={`f-${bi}`} title={batch.title} rows={batch.rows} />
             ) : (
-              <Shelf
-                key={`f-${bi}`}
-                title="More albums to explore"
-                subtitle={batch.title !== 'More albums to explore' ? `Because you browse ${batch.title.toLowerCase()}` : 'Dig deeper — every card opens the full record'}
-              >
-                {batch.rows.map((a) => (
-                  <AlbumCard
-                    key={a.id}
-                    id={a.id}
-                    name={a.name}
-                    artist={a.artist}
-                    thumbnail={a.thumbnail}
-                    year={a.year}
-                  />
-                ))}
-              </Shelf>
+              <FeedAlbumsSection key={`f-${bi}`} title={batch.title} rows={batch.rows} />
             ),
           )}
 

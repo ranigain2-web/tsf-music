@@ -100,6 +100,7 @@ export async function GET(req: NextRequest) {
           send({ type: 'final', error: 'Query blocked by content safety filter' })
         } else if (source === 'youtube') {
           // ── YT Music source (raw catalog rows, reference v3.4) ──
+          // R8-P2/P3: songs-filter primary + continuation for deep pages.
           const wasAvailable = ytAvailable()
           const out = await ytSearchMusic(q, 30, req.signal)
           const rows: SearchRow[] = out.tracks.map((t, i) => ({
@@ -116,6 +117,7 @@ export async function GET(req: NextRequest) {
               latencyMs: Date.now() - startedAt,
               ytUnavailable: !wasAvailable || out.unavailable,
               source: 'youtube',
+              ytContinuation: out.continuation ?? null,
             },
           })
         } else if (vibe) {

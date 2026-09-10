@@ -7,7 +7,7 @@
  * it renders after hydration and dismisses are permanent per version.
  */
 
-export const APP_VERSION = '0.3.0'
+export const APP_VERSION = '0.4.0'
 
 export interface WhatsNewEntry {
   version: string
@@ -17,6 +17,28 @@ export interface WhatsNewEntry {
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  {
+    version: '0.4.0',
+    title: 'Real songs, deep results, zero repeats',
+    date: '2026-09-10',
+    items: [
+      'Zero-repeat lists — same recording re-listed with re-ordered credits collapses to one row, everywhere (search, feed, home)',
+      'YouTube goes deep — results now walk continuation pages as you scroll, with honest retry states instead of dead ends',
+      'Official songs first — YouTube search leads with the Songs filter so the real recording outranks lo-fi mixes and lyric videos',
+      'Faster home scrolling — endless-feed rows render off snapshots so deep scrolls stay smooth',
+    ],
+  },
+  {
+    version: '0.3.1',
+    title: 'YouTube hardening + endless home feed',
+    date: '2026-08-30',
+    items: [
+      'YouTube playback hardening — full-length resolver chain with fair-wait and honest fallbacks',
+      'Queue glitch fix — stable ordering across shuffle, healing, and radio injection',
+      'Search pagination (F1) — catalog results append deep pages as you scroll',
+      'Endless home feed (F2) — the home tail scrolls forever with retry and end states',
+    ],
+  },
   {
     version: '0.3.0',
     title: 'Search that finds the song you meant',

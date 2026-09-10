@@ -868,9 +868,9 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
                     </div>
                   )}
 
-                  {/* F1 · infinite-pagination tail — sentinel + honest states.
-                      Catalog appends continuation pages; YouTube/vibe are
-                      bounded sets and say so instead of pretending. */}
+                  {/* F1/R8-P3 · infinite-pagination tail — sentinel + honest states.
+                      Catalog appends JioSaavn pages; YouTube walks its
+                      continuation chain (single-flight, retryable). */}
                   {rows.length > 0 && (
                     <div className="mt-4 pb-2">
                       {more.loading && (
@@ -891,7 +891,7 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
                           <RotateCcw size={13} /> Retry loading more
                         </button>
                       )}
-                      {v2.phase === 'ready' && v2.source === 'youtube' && rows.length > 0 && !more.note && (
+                      {v2.phase === 'ready' && v2.source === 'youtube' && rows.length > 0 && !more.note && !more.hasMore && (
                         <div className="py-3 text-center text-[13px] text-[#a7a7a7] border-t border-white/5">
                           That&rsquo;s everything YouTube found
                         </div>

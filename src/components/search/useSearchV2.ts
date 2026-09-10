@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { streamNdjson } from './stream'
 import type { SearchEarly, SearchRow, SearchSourceKey, SearchV2Final, SearchV2State } from './types'
+import { YT_END_NOTE, YT_RETRY_NOTE } from '@/lib/search-v2/yt-append'
 
 export interface SearchV2Run {
   /** increments on every run() — the UI keys ledger/recents side-effects on it */
@@ -49,6 +50,12 @@ export function useSearchV2(): SearchV2Run {
   })
   const rowsRef = useRef<SearchRow[]>([])
   rowsRef.current = state.phase === 'ready' ? state.final?.rows ?? [] : []
+  // ---- R8-P3 · YouTube continuation walk (gen-keyed single-flight) -------
+  // The scroll sentinel + eager top-up can fire concurrently — same-gen
+  // calls share ONE fetchMore; a new query never queues behind a doomed
+  // walk (its results would be stale-swallowed anyway).
+  const ytContRef = useRef<string | null>(null)
+  const ytInflightRef = useRef<{ gen: number; p: Promise<void> } | null>(null)
 
   const run = useCallback((q: string, source: SearchSourceKey) => {
     const query = q.trim()
@@ -62,13 +69,18 @@ export function useSearchV2(): SearchV2Run {
     if (!query) {
       setState({ phase: 'idle' })
       moreRef.current = { page: 1, loading: false, hasMore: false }
+      ytContRef.current = null
+      ytInflightRef.current = null
       setMore({ loading: false, hasMore: false, note: null, error: false })
       return
     }
     setState({ phase: 'loading', source })
-    // fresh query → pagination resets (catalog pages can load more; youtube/vibe never)
+    // fresh query → pagination resets (catalog: JioSaavn pages; youtube:
+    // continuation walk — both can load more; vibe never)
     rowsRef.current = []
-    moreRef.current = { page: 1, loading: false, hasMore: source === 'catalog' }
+    ytContRef.current = null
+    ytInflightRef.current = null
+    moreRef.current = { page: 1, loading: false, hasMore: source !== 'catalog' ? false : true }
     setMore({ loading: false, hasMore: source === 'catalog', note: null, error: false })
 
     const onEarly = (early: SearchEarly) => {
@@ -78,6 +90,13 @@ export function useSearchV2(): SearchV2Run {
     const onFinal = (result: SearchV2Final | undefined, error?: string) => {
       if (genRef.current !== myGen || ctrl.signal.aborted) return
       setState({ phase: 'ready', source, final: result ?? { rows: [] }, error })
+      // youtube deep pagination primes here (R8-P3)
+      if (source === 'youtube') {
+        const cont = (result as SearchV2Final & { ytContinuation?: string | null })?.ytContinuation ?? null
+        ytContRef.current = cont
+        moreRef.current = { page: 1, loading: false, hasMore: !!cont }
+        setMore({ loading: false, hasMore: !!cont, note: null, error: false })
+      }
     }
 
     const url = `/api/ytm/search-v2?q=${encodeURIComponent(query)}&source=${source}`
@@ -108,22 +127,94 @@ export function useSearchV2(): SearchV2Run {
     abortRef.current = null
     setState({ phase: 'idle' })
     moreRef.current = { page: 1, loading: false, hasMore: false }
+    ytContRef.current = null
+    ytInflightRef.current = null
     setMore({ loading: false, hasMore: false, note: null, error: false })
   }, [])
 
   /**
-   * F1 · append the next JioSaavn page when the sentinel scrolls into view
-   * (reference v3.4.1 parity). Dedupe by id, honest-end contract (<25%
-   * fresh), muted-artist parity server-side; rows are PLAYABLE saavn-<id>
-   * catalog rows resolved by the stream route. Never for youtube/vibe.
+   * Append the next page — catalog (JioSaavn pages, reference v3.4.1) or
+   * youtube (InnerTube continuation walk, R8-P3 single-flight + retryable).
+   * Never for vibe. YouTube transport failures keep the token + hasMore
+   * (a network blip is not end-of-catalog); honest end paints YT_END_NOTE.
    */
   const loadMore = useCallback(async (): Promise<void> => {
     const st = state
     if (st.phase !== 'ready' || moreRef.current.loading) return
-    if (st.source !== 'catalog' || st.final?.vibe) return
+    if (st.final?.vibe) return
+    const myGen = genRef.current
+
+    // ── youtube continuation walk (R8-P3) ──
+    if (st.source === 'youtube') {
+      const inflight = ytInflightRef.current
+      if (inflight && inflight.gen === myGen) return inflight.p
+      const cont = ytContRef.current
+      if (!cont) return
+      moreRef.current.loading = true
+      setMore((m) => ({ ...m, loading: true, note: null, error: false }))
+      const slot: { gen: number; p: Promise<void> } = { gen: myGen, p: Promise.resolve() }
+      slot.p = (async () => {
+        try {
+          const res = await fetch('/api/ytm/search-yt-more', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ continuation: cont }),
+          })
+          if (genRef.current !== myGen) return
+          const j = (await res.json()) as {
+            tracks?: SearchRow[]
+            continuation?: string | null
+            end?: boolean
+            error?: boolean
+          }
+          if (genRef.current !== myGen) return
+          if (j.error) {
+            // transport failure — keep token, stay retryable
+            moreRef.current = { ...moreRef.current, loading: false }
+            setMore((m) => ({ ...m, loading: false, error: true, note: YT_RETRY_NOTE, hasMore: true }))
+            return
+          }
+          const fresh = j.tracks ?? []
+          const before = rowsRef.current
+          const have = new Set(before.map((r) => r.id))
+          const freshRows = fresh.filter((r) => !have.has(r.id))
+          const merged = [...before, ...freshRows]
+          ytContRef.current = j.continuation ?? null
+          const hasMore = !!j.continuation && !j.end
+          moreRef.current = { page: moreRef.current.page + 1, loading: false, hasMore }
+          setState((prev) =>
+            prev.phase === 'ready' && prev.source === 'youtube'
+              ? { ...prev, final: { ...prev.final, rows: merged, ytContinuation: j.continuation ?? null } }
+              : prev,
+          )
+          setMore({
+            loading: false,
+            hasMore,
+            // productive append clears any stale retry note
+            note: hasMore ? null : YT_END_NOTE,
+            error: false,
+          })
+        } catch {
+          if (genRef.current !== myGen) return
+          moreRef.current = { ...moreRef.current, loading: false }
+          setMore((m) => ({ ...m, loading: false, error: true, note: YT_RETRY_NOTE, hasMore: true }))
+        } finally {
+          if (ytInflightRef.current === slot) ytInflightRef.current = null
+          moreRef.current.loading = false
+          if (genRef.current === myGen) {
+            setMore((m) => ({ ...m, loading: false }))
+          }
+        }
+      })()
+      ytInflightRef.current = slot
+      return slot.p
+    }
+
+    // ── catalog (existing JioSaavn pages) ──
+    if (st.source !== 'catalog') return
     const q = st.final?.plan?.raw ?? ''
     if (!q) return
-    const myGen = genRef.current
+    const catGen = genRef.current
     moreRef.current.loading = true
     setMore((m) => ({ ...m, loading: true, note: null, error: false }))
     try {
@@ -133,7 +224,7 @@ export function useSearchV2(): SearchV2Run {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: q, page: moreRef.current.page + 1, seenIds }),
       })
-      if (genRef.current !== myGen) return // superseded by a new query
+      if (genRef.current !== catGen) return // superseded by a new query
       const j = (await res.json()) as {
         rows?: SearchRow[]
         page?: number
@@ -141,7 +232,7 @@ export function useSearchV2(): SearchV2Run {
         note?: string
         error?: boolean
       }
-      if (genRef.current !== myGen) return
+      if (genRef.current !== catGen) return
       if (j.error) {
         moreRef.current = { ...moreRef.current, loading: false }
         setMore((m) => ({ ...m, loading: false, error: true, note: "Couldn't load more — check your connection" }))
@@ -168,7 +259,7 @@ export function useSearchV2(): SearchV2Run {
         error: false,
       })
     } catch {
-      if (genRef.current !== myGen) return
+      if (genRef.current !== catGen) return
       moreRef.current = { ...moreRef.current, loading: false }
       setMore((m) => ({ ...m, loading: false, error: true, note: "Couldn't load more — check your connection" }))
     }

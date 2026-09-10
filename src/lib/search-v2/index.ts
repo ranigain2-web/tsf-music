@@ -40,6 +40,7 @@ import {
   SNAPSHOT_KEY,
 } from './lexicon';
 import { sigUnmet, runRescueLadder, titleAuthorityMissing, type RescueRung } from './rescue';
+import { reconcileRecordings } from './recording';
 import { compileProfile, loadCorrections } from '@/lib/mindbeat/profile'
 import type { SearchRow } from './rows'
 
@@ -349,9 +350,11 @@ export async function searchMusicV2(
 
   // PROGRESSIVE PAINT (P0-2 fix): the ranked set paints the moment it is
   // ready; recovery/superset work continues below.
+  // R8-P4: recording reconciliation collapses same-recording re-lists
+  // (re-ordered/truncated credits + play-count twins) before paint.
   if (opts.onEarly && earlyRanked.length > 0 && !opts.signal?.aborted) {
     opts.onEarly({
-      rows: toRowList(earlyRanked),
+      rows: toRowList(reconcileRecordings(earlyRanked) as RankedRow[]),
       latencyMs: Date.now() - t0,
       probes: retrieval.probes,
       stages: { s0PlanMs, s1RetrieveMs, s2VerifyMs, s3RankMs, rescueMs: 0, recoverMs: 0, learnMs: 0, totalMs: Date.now() - t0 },
@@ -526,7 +529,7 @@ export async function searchMusicV2(
     }
   }
 
-  let rows = toRowList(ranked);
+  let rows = toRowList(reconcileRecordings(ranked) as RankedRow[]);
   let relaxedFrom: string | undefined;
   let relaxedQuery: string | undefined;
 
@@ -564,7 +567,7 @@ export async function searchMusicV2(
         const v2 = verifySet(next, r2.pools);
         const rk2 = rankRows(next, v2.rows, ctx);
         if (rk2.length > rows.length) {
-          rows = toRowList(rk2);
+          rows = toRowList(reconcileRecordings(rk2) as RankedRow[]);
           relaxedFrom = plan.raw.trim();
           relaxedQuery = next.normalized;
         }

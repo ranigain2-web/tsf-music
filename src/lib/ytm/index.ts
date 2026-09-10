@@ -10,6 +10,7 @@ import { parseSearch, parseTracklist, parseArtistPage, parseHomeFeed, parseRadio
 import { seedSearch, seedHome, seedArtist, seedAlbumTracks } from './seed'
 import { db } from '@/lib/db'
 import { filterSafeTracks, isShelfTitleSafe } from '@/lib/safety'
+import { reconcileRecordings } from '@/lib/search-v2/recording'
 
 export type { YtmTrack, YtmAlbum, YtmArtist, YtmShelf }
 
@@ -122,7 +123,16 @@ export async function search(query: string, filter?: keyof typeof SEARCH_FILTERS
         .map((x) => x.t)
     }
     // SAFETY: drop inappropriate content
-    const safeTracks = filterSafeTracks(parsed.tracks)
+    // R8-P4: recording reconciliation — same recording re-listed with
+    // re-ordered/truncated credits collapses to one row (Top Songs fix).
+    const { parseHumanCount } = await import('@/lib/search-v2/rows')
+    const reconciled = reconcileRecordings(parsed.tracks.map((t) => ({
+      title: t.title,
+      artist: t.artistName,
+      playCount: parseHumanCount(t.plays),
+      _t: t,
+    }))).map((r) => (r as unknown as { _t: YtmTrack })._t)
+    const safeTracks = filterSafeTracks(reconciled)
     const safeAlbums = (parsed.albums || []).filter((a) => isShelfTitleSafe(a.name + ' ' + (a.artistName || '')))
     const safeArtists = (parsed.artists || []).filter((a) => isShelfTitleSafe(a.name))
     await persistTracks(safeTracks)
@@ -175,7 +185,13 @@ export async function searchPage(
         : Array.isArray(rawCont)
           ? rawCont?.[0]?.nextContinuationData?.continuation
           : undefined
-    const safeTracks = filterSafeTracks(parsed.tracks)
+    const safeTracks = filterSafeTracks(
+      reconcileRecordings(parsed.tracks.map((t) => ({
+        title: t.title,
+        artist: t.artistName,
+        _t: t,
+      }))).map((r) => (r as unknown as { _t: YtmTrack })._t),
+    )
     void persistTracks(safeTracks).catch(() => {})
     return {
       tracks: safeTracks,

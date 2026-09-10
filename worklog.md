@@ -994,3 +994,28 @@ Work Log:
 
 Stage Summary:
 - Complete handover delivered: /home/z/my-project/HANDOVER.md (untracked by design) + worklog.md remains the wave-level journal. Project is at v0.3.1, all CI green, 15-min gauntlet watchdog still active. A new owner/session can start from HANDOVER.md §7 (runbook) and §10 (loop contract) with zero context loss.
+
+---
+Task ID: 19
+Agent: Buffy (Freebuff — environment rebuild + readiness round)
+Task: "Understand the complete project A-Z and get ready to work on it" — new sandbox (/workspaces/tsf-music), full context restore + live stack bring-up.
+
+Work Log:
+- CONTEXT RESTORED: read worklog.md end-to-end (Tasks 1–18), README, package.json, prisma schema (19 models), src/ tree (203 files, ~40k LOC), git state. Pulled origin/main (was behind 2) → HEAD 32ecc03 (task-18 handover commit). Note: HANDOVER.md is git-ignored by design (contains credentials) and does not exist in this fresh environment — its content is reconstructible from worklog.md Tasks 1–18.
+- TOOLCHAIN REBUILT (fresh sandbox had NOTHING): bun 1.4.2 (npm -g), bun install (693 pkgs), prisma generate, mini-services/pot-provider bun install (307 pkgs) + booted (:4416 ping OK), yt-dlp 2026.08.19 standalone → ~/.venv/bin + bgutil POT plugin → ~/.config/yt-dlp/plugins, deno 2.9.6 → ~/.deno/bin.
+- PORTABILITY FIX (committed 63e8986): ytdlp.ts CANDIDATE_PATHS + DENO_PATH were hardcoded to the OLD sandbox home (/home/z/...) → now $HOME-relative (env overrides TSF_YTDLP_BIN/TSF_DENO_DIR still authoritative). .env DATABASE_URL repointed /home/z/my-project → /workspaces/tsf-music.
+- ENV WAR STORY: agent runtime injects stale DATABASE_URL=file:/home/z/my-project/db/custom.db into EVERY spawned process (overrides .env). Fix: sudo mkdir /home/z/my-project/db + symlink custom.db → /workspaces/tsf-music/db/custom.db + chown -R codespace /home/z (SQLite needs WAL/journal CREATE in the dir; read-only was not enough). ~/.bashrc export added as belt-and-braces. All future rounds: the /home/z path is now a valid alias for the real DB.
+- PROCESS MANAGEMENT LESSON: dev server must be launched with `setsid nohup ... < /dev/null &` (plain nohup/& gets reaped between tool calls); restarts must kill BOTH "next dev" and the orphaned "next-server" child or the stale process keeps :3000.
+- VERIFICATION (all live):
+  - bun run lint → 0 problems; bunx tsc -p tsconfig.ci.json → exit 0
+  - scripts/search-v2-check.ts → 29/29 PASS
+  - GET /api/ai/home → 200, greeting "Good afternoon", 11 shelves, bandit cold
+  - GET /api/ytm/search-v2?q=tum hi ho → 200 NDJSON, early event in 1.56s, saavn-aRZbUYD7 top row (Arijit Singh)
+  - GET /api/ytm/typeahead?q=tum → 200 w/ recents+songs
+  - POST /api/mindbeat/next-up → 200, real picks w/ reasons (Chappell Roan — learned profile intact)
+  - PLAYBACK: /api/stream?id=dQw4w9WgXcQ&head=1 → 200, X-Stream-Provider: yt-dlp; followed redirect → googlevideo → HTTP 206, 64KB pulled, valid fMP4 (ftyp). FULL-LENGTH YOUTUBE WORKS FROM THIS DATACENTER IP again (POT chain healthy).
+  - saavn-<id> scheme → 200 in 9ms.
+- Runtime state at handoff: dev server UP (:3000, PID family 24126+), POT provider UP (:4416), yt-dlp available:true, AI gateway probed on demand.
+
+Stage Summary:
+- Project fully understood A-Z AND live-ready in the new environment. All P0 chains proven: playback (full-length via POT+yt-dlp), search V2, MINDBEAT, AI home, lint/tsc/oracle green. One portability commit (63e8986) awaits push (CI will fire macos.yml on src/**). Watch-item: db/custom.db shows local modification (live DB writes from QA smokes — expected, do not commit unless intentional).

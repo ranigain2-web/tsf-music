@@ -22,6 +22,7 @@
  */
 
 import { searchPage } from '@/lib/ytm'
+import { reconcileRecordings } from '@/lib/search-v2/recording'
 
 export interface FeedSong {
   videoId: string
@@ -167,10 +168,12 @@ export class EndlessFeedPager {
       } catch {
         return 'error' // network failure — NOT a dry page, no budget burn
       }
-      const fresh = (rows as Array<{ id?: string; videoId?: string }>).filter((r) => {
-        const id = r.videoId ?? r.id ?? ''
-        return id && !seen.has(id)
-      })
+      const fresh = reconcileRecordings(
+        (rows as Array<{ id?: string; videoId?: string; title?: string; artistName?: string }>).filter((r) => {
+          const id = r.videoId ?? r.id ?? ''
+          return id && !seen.has(id)
+        }).map((r) => ({ ...r, artist: (r as { artistName?: string }).artistName })),
+      ) as unknown as T[]
       for (const r of fresh) {
         const id = (r as { videoId?: string; id?: string }).videoId ?? (r as { id?: string }).id ?? ''
         if (id) seen.add(id)

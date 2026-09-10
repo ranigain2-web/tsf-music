@@ -141,8 +141,17 @@ export async function POST(req: NextRequest) {
   const freshRatio = raw.length > 0 ? rows.length / raw.length : 0
   const end = raw.length === 0 || freshRatio < FRESH_PAGE_RATIO
 
+  // R8-P4: recording reconciliation — JioSaavn re-lists the same recording
+  // across compilations/presses with different ids; collapse before paint.
+  let outRows = rows
+  try {
+    const { reconcileRecordings } = await import('@/lib/search-v2/recording')
+    outRows = reconcileRecordings(rows) as MoreRow[]
+    outRows.forEach((r, i) => { r.poolRank = i })
+  } catch { /* best-effort */ }
+
   return NextResponse.json({
-    rows,
+    rows: outRows,
     page,
     end,
     note: end && raw.length > 0 ? 'End of results' : undefined,
