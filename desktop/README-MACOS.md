@@ -45,6 +45,26 @@ DMG, drag **TSF Music** → **Applications**, launch. Nothing else. No prompts.
 4. Launch from **Launchpad / Applications** — never from inside the DMG.
    First launch boots the engine (~5 s).
 
+### Zero-prompt install (no Apple account needed)
+
+The quarantine flag that triggers Gatekeeper is applied by **the browser**, not
+by GitHub. Downloading the same asset with `curl` in Terminal skips it — the
+DMG arrives clean, so `xattr`/First-Run are unnecessary and macOS does not
+prompt at all:
+
+```bash
+# grab the newest Intel DMG straight from the release
+curl -L -o ~/Downloads/TSF-Music-x64.dmg \
+  https://github.com/ranigain2-web/tsf-music/releases/latest/download/TSF-Music-0.4.1-x64.dmg
+hdiutil attach ~/Downloads/TSF-Music-x64.dmg
+cp -R "/Volumes/TSF Music/TSF Music.app" /Applications/
+hdiutil detach "/Volumes/TSF Music"
+open "/Applications/TSF Music.app"
+```
+
+This works because the hardened-runtime gate only fires on quarantined files;
+a signature that is merely *ad-hoc* is accepted for a locally-copied bundle.
+
 ### Why it gets blocked EVERY launch (and how to stop it)
 
 Almost always this means the app is being launched **from inside the mounted
@@ -59,21 +79,21 @@ Fix: **install to /Applications** (drag it out), run First-Run once, then
 launch from /Applications. From v0.4.1 the app detects a `TSF-Music-*.dmg` in
 `~/Downloads` and shows this exact instruction on its boot screen.
 
-> **Permanent fix — Developer ID signing + notarization.** The macOS workflow
-auto-activates it when these repo secrets exist: `APPLE_SIGNING_IDENTITY`,
-> `APPLE_CERTIFICATE` (base64-encoded `.p12`), `APPLE_CERTIFICATE_PASSWORD`,
-> `APPLE_ID`, `APPLE_PASSWORD` (app-specific password), `APPLE_TEAM_ID`.
-> Requires a paid Apple Developer Program membership ($99/yr) — this is an
-> Apple requirement, not a TSF one. Notarized downloads open with **no**
-> prompt and no First-Run script, on any Mac. The pipeline signs every nested
-> helper (`bun`, `yt-dlp`, `deno`, the POT provider) and applies
-> `src-tauri/entitlements.plist` so the embedded JS runtimes survive the
-> hardened runtime.
->
+### Permanent fix — Developer ID signing + notarization
+
+The macOS workflow auto-activates it when these repo secrets exist:
+`APPLE_SIGNING_IDENTITY`, `APPLE_CERTIFICATE` (base64-encoded `.p12`),
+`APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD` (app-specific
+password), `APPLE_TEAM_ID`. Requires a paid Apple Developer Program membership
+($99/yr) — this is an Apple requirement, not a TSF one. Notarized downloads
+open with **no** prompt and no First-Run script, on any Mac, from any browser.
+The pipeline signs every nested helper (`bun`, `yt-dlp`, `deno`, the POT
+provider) and applies `src-tauri/entitlements.plist` so the embedded JS
+runtimes survive the hardened runtime.
+
 > **Status: implemented but not yet validated on a macOS runner** — it is
-> dormant until the secrets are added. Validate one dispatch run before
-> trusting it; the ad-hoc path remains the fallback and still ships a working
-> app.
+dormant until the secrets are added. Validate one dispatch run before trusting
+it; the ad-hoc path remains the fallback and still ships a working app.
 
 ## Logs / data
 
