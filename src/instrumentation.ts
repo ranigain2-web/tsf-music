@@ -18,6 +18,7 @@
  *      first screen (and the user's first pick) hits warm caches;
  *   4. the stream resolver for the most recent history tracks — the ones
  *      Quick Picks serves first — so the first TAP after launch is fast too.
+ * Steps 3 and 4 run concurrently so neither waits behind the other.
  *
  * Every step is best-effort: failures are swallowed and the lazy on-demand
  * paths behave exactly as before. Nothing here may delay the listener — the
@@ -37,22 +38,32 @@ export async function register() {
 }
 
 async function warmup(): Promise<void> {
-  // Sequential on purpose: the home-feed warm is CPU/network heavy and must
-  // not compete with the health gate or the binary probe on a cold machine.
-  const steps: Array<[string, () => Promise<void>]> = [
-    ['yt-dlp', warmYtDlp],
-    ['ai-config', warmAiConfig],
-    ['home-feed', warmHomeFeed],
-    ['recent-streams', warmRecentTracks],
-  ]
-  for (const [name, run] of steps) {
+  const debug = process.env.TSF_WARMUP_DEBUG === '1'
+  const run = async (name: string, fn: () => Promise<void>) => {
     try {
-      await run()
-      if (process.env.TSF_WARMUP_DEBUG === '1') console.log(`[warmup] ${name}: ok`)
+      await fn()
+      if (debug) console.log(`[warmup] ${name}: ok`)
     } catch (e) {
-      if (process.env.TSF_WARMUP_DEBUG === '1') console.log(`[warmup] ${name}: failed: ${e}`)
+      if (debug) console.log(`[warmup] ${name}: failed: ${e}`)
     }
   }
+
+  // Cheap prerequisites first — they are fast and the stream warm depends on
+  // the yt-dlp probe. Never let either delay the two heavy warms below.
+  await run('yt-dlp', warmYtDlp)
+  await run('ai-config', warmAiConfig)
+
+  // The two heavy warms run TOGETHER on purpose. Sequential order cost the
+  // stream warm 3-4s of dead time behind the home feed, and the stream warm is
+  // the one the user actually feels ("the phone loads music faster"). The
+  // provider chain self-limits its own subprocess concurrency, so running
+  // these in parallel does not stampede the machine — and because resolveStream
+  // de-duplicates in-flight work, a tap that lands mid-warm still joins the
+  // resolve already running instead of starting a second one.
+  await Promise.allSettled([
+    run('home-feed', warmHomeFeed),
+    run('recent-streams', warmRecentTracks),
+  ])
 }
 
 /**
@@ -100,9 +111,9 @@ async function warmHomeFeed(): Promise<void> {
  * boot, so the first tap after launch is as fast as the always-warm server the
  * phone talks to. Bounded to 3 tracks and opt-out via TSF_NO_STREAM_WARM=1.
  *
- * Runs LAST on purpose: it spawns the heaviest work (yt-dlp subprocesses +
- * BotGuard token minting), which must not compete with the health gate or the
- * user's first interaction.
+ * Not run before the listener is up, and not before the cheap prerequisite
+ * probes — it spawns the heaviest work (yt-dlp subprocesses + BotGuard token
+ * minting) and must not compete with the Tauri shell's health gate.
  */
 async function warmRecentTracks(): Promise<void> {
   if (process.env.TSF_NO_STREAM_WARM === '1') return
