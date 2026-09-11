@@ -449,9 +449,19 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # desktop/install-macos.sh verifies SHA256SUMS.txt when the release has
+      # one, so users installing via the free ad-hoc path can trust the bytes
+      # they downloaded even though the app itself isn't notarized.
+      - name: Publish checksums
+        run: |
+          cd dist
+          sha256sum *.dmg *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/*.dmg
             dist/*.zip
+            dist/SHA256SUMS.txt
           generate_release_notes: true

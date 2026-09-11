@@ -35,49 +35,97 @@ uses) when present.
 **If the release is notarized** (repo has the signing secrets): download the
 DMG, drag **TSF Music** → **Applications**, launch. Nothing else. No prompts.
 
-**If the release is ad-hoc signed** (no secrets — the current default):
+**If the release is ad-hoc signed** (no secrets — the current default): use
+the one-command installer below. **Do not** install by downloading the DMG in
+a browser — that is what causes the repeated Gatekeeper blocks.
 
-1. Download `TSF-Music-*-x64.dmg` (Intel) from the release/artifacts.
-2. Open the DMG, drag **TSF Music** → **Applications**.
-3. Double-click **First-Run-MacOS.command** (in the same DMG) once.
-   It removes the Gatekeeper quarantine flag (macOS Sequoia/Tahoe removed
-   right-click→Open for unsigned apps; this script is the sanctioned path).
-4. Launch from **Launchpad / Applications** — never from inside the DMG.
-   First launch boots the engine (~5 s).
+---
 
-### Zero-prompt install (no Apple account needed)
+### ✅ Recommended: one command, no prompts, no Apple account
 
-The quarantine flag that triggers Gatekeeper is applied by **the browser**, not
-by GitHub. Downloading the same asset with `curl` in Terminal skips it — the
-DMG arrives clean, so `xattr`/First-Run are unnecessary and macOS does not
-prompt at all:
+Paste this into **Terminal** and press Return:
 
 ```bash
-# grab the newest Intel DMG straight from the release
-curl -L -o ~/Downloads/TSF-Music-x64.dmg \
-  https://github.com/ranigain2-web/tsf-music/releases/latest/download/TSF-Music-0.4.1-x64.dmg
-hdiutil attach ~/Downloads/TSF-Music-x64.dmg
-cp -R "/Volumes/TSF Music/TSF Music.app" /Applications/
-hdiutil detach "/Volumes/TSF Music"
-open "/Applications/TSF Music.app"
+curl -fsSL https://raw.githubusercontent.com/ranigain2-web/tsf-music/main/desktop/install-macos.sh | bash
 ```
 
-This works because the hardened-runtime gate only fires on quarantined files;
-a signature that is merely *ad-hoc* is accepted for a locally-copied bundle.
+That is the whole install. The script:
+
+1. detects Intel vs Apple Silicon and picks the matching DMG;
+2. resolves the **newest** release (no version to edit);
+3. downloads it and verifies `SHA256SUMS.txt` when the release publishes one;
+4. verifies the bundle's CPU architecture actually matches your Mac;
+5. quits any running copy and installs to `/Applications` with `ditto`
+   (preserves the code signature — `cp -R` does not);
+6. clears the Gatekeeper quarantine flag and reports the signature honestly;
+7. launches the app.
+
+It is idempotent — re-running it is a safe upgrade. Options:
+
+| Env var | Effect |
+| --- | --- |
+| `TSF_TAG=v0.4.1` | install a specific release instead of the newest |
+| `TSF_DEST=~/Applications` | install somewhere other than `/Applications` |
+| `TSF_NO_LAUNCH=1` | install without opening the app |
+| `TSF_FORCE=1` | reinstall even when that version is already present |
+
+**Why this sidesteps Gatekeeper:** the quarantine flag that triggers the block
+is applied by **the browser**, not by GitHub. A `curl` download never gets it,
+so the app is never quarantined and macOS has nothing to complain about. This
+is not a security bypass — the signature is still verified, it is simply a
+locally-created file rather than a browser-downloaded one.
+
+### Verify a problem install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ranigain2-web/tsf-music/main/desktop/tsf-doctor.sh | bash
+```
+
+Reports the app version, signature authority, quarantine state, the bundled
+engine's health, every provider's live/cooling state, resolve latency percentiles
+— and then resolves a real track and tells you plainly whether you got
+**full-length audio, a 30 s preview, or the offline synth**.
+
+### Manual fallback (if you prefer to see every step)
+
+```bash
+# EITHER use the installer without piping it:
+curl -fsSL -o /tmp/tsf-install.sh \
+  https://raw.githubusercontent.com/ranigain2-web/tsf-music/main/desktop/install-macos.sh
+less /tmp/tsf-install.sh        # read it first
+bash /tmp/tsf-install.sh
+
+# OR do it by hand (Intel; use -arm64 on Apple Silicon):
+curl -fL -o ~/Downloads/TSF-Music.dmg \
+  https://github.com/ranigain2-web/tsf-music/releases/latest/download/TSF-Music-0.4.1-x64.dmg
+hdiutil attach ~/Downloads/TSF-Music.dmg -nobrowse
+cp -R "/Volumes/TSF Music/TSF Music.app" /Applications/
+hdiutil detach "/Volumes/TSF Music"
+xattr -cr "/Applications/TSF Music.app"
+open "/Applications/TSF Music.app"
+```
 
 ### Why it gets blocked EVERY launch (and how to stop it)
 
 Almost always this means the app is being launched **from inside the mounted
-DMG**, or re-downloaded each time:
+DMG**, or re-downloaded (in a browser) each time:
 
 * A file on a read-only DMG can never have its quarantine flag removed, so
   macOS re-assesses and re-blocks it on every open.
-* Every fresh download is a *new* build with a *new* ad-hoc signature, so
-  macOS treats it as a brand-new app and asks again.
+* Every browser download is a *new* file with a *new* quarantine flag, and
+  each build carries a *new* ad-hoc signature, so macOS treats it as a
+  brand-new app and asks again.
 
-Fix: **install to /Applications** (drag it out), run First-Run once, then
-launch from /Applications. From v0.4.1 the app detects a `TSF-Music-*.dmg` in
-`~/Downloads` and shows this exact instruction on its boot screen.
+Fix: install once with the one-command installer above, then launch from
+**Launchpad / Applications** — never from inside the DMG. From v0.4.1 the app
+detects a `TSF-Music-*.dmg` in `~/Downloads` and shows this exact instruction
+on its boot screen. If you already have a broken copy, delete it and reinstall
+with the one-liner:
+
+```bash
+rm -rf "/Applications/TSF Music.app"
+curl -fsSL https://raw.githubusercontent.com/ranigain2-web/tsf-music/main/desktop/install-macos.sh | bash
+```
 
 ### Permanent fix — Developer ID signing + notarization
 
@@ -170,6 +218,31 @@ Prisma's `file:` URL parsing on every Mac. It is now percent-encoded
 | Nested helper signatures | `Codesign` step audits each nested Mach-O; notarization fails on any unsigned binary |
 | Quarantine self-heal is cheap | walks only when the bundle is actually quarantined |
 | Boot warm-up runs | `TSF_WARMUP_DEBUG=1` logs each stage; verified live in the dev sandbox |
+| One-command installer | resolves the live release, both DMG URLs return 200 with the expected sizes; platform/arch guards exercised |
+| `SHA256SUMS.txt` published | `release` job computes it from the shipped artifacts on every tag |
+| Doctor reports honestly | run against a live engine: 3/16 providers, per-provider ok counts, and a real full-length resolve |
+| Whole API surface | `scripts/e2e-check.ts` — 134 checks, green against **both** `bun run dev` and the production `standalone` build |
+
+## In-app diagnostics
+
+Everything the doctor prints is also reachable inside the app: **Sidebar →
+Engine health** (`src/components/views/EngineHealthView.tsx`). It renders
+`/api/health` as a first-class surface — provider table with cold-down state and
+last error, resolve-latency percentiles, a per-provider "who is actually
+serving your music" breakdown, the last 20 raw resolves, and the AI gateway
+probe.
+
+Two things make it useful rather than decorative:
+
+* **Test a track** calls `/api/stream?id=…&head=1`, which resolves and returns
+the `X-Stream-Provider` / `X-Stream-Bitrate` headers *without downloading any
+audio* — so you get the same honest verdict as playback, in milliseconds, for
+any id (including `saavn-…` catalogue ids).
+* **Re-probe** and **purge stream cache** expose the two resolver escape
+hatches (`/api/health?fresh=1`, `?purge=1`) that were previously curl-only.
+
+Degradation is labelled, never hidden: full-length = emerald, 30 s preview =
+amber, offline synth = slate — the same semantics as the player's source badge.
 
 ## Local development (Mac, without CI)
 

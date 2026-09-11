@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Home, Search, Library, Plus, Heart, Clock3, Wand2, Dna } from 'lucide-react'
+import { Home, Search, Library, Plus, Heart, Clock3, Wand2, Dna, Activity } from 'lucide-react'
 import { useNav, type View } from '@/store/nav'
 import { useLibrary } from '@/store/library'
 import { usePlayer } from '@/store/player'
@@ -127,6 +127,20 @@ export function Sidebar() {
               <span className="block text-[12px] text-[#b3b3b3] truncate">What the engine learned</span>
             </span>
           </button>
+          {/* Engine health — transparency surface for the playback chain */}
+          <button
+            onClick={() => push({ type: 'health' })}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors hover:bg-[#1a1a1a]"
+            aria-label="Open Engine health — providers, timings and honest fallbacks"
+          >
+            <span className="w-9 h-9 rounded-full bg-[#1ed760]/15 text-[#1ed760] flex items-center justify-center shrink-0">
+              <Activity size={18} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-white">Engine health</span>
+              <span className="block text-[12px] text-[#b3b3b3] truncate">Providers &amp; timings</span>
+            </span>
+          </button>
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-0.5">
@@ -164,7 +178,7 @@ export function Sidebar() {
                 }
                 title={pl.name}
                 subtitle={pl.source === 'ai' ? 'AI Playlist' : 'Playlist'}
-                playing={current && pl.coverTracks?.some((t) => t.videoId === current.videoId)}
+                playing={Boolean(current && pl.trackIds?.includes(current.videoId))}
               />
             )
           })}

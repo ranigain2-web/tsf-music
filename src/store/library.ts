@@ -18,6 +18,8 @@ export interface Playlist {
   updatedAt: string
   coverTracks?: PlayerTrack[]
   trackCount?: number
+  /** Every videoId in the playlist (coverTracks is capped at 4 for artwork). */
+  trackIds?: string[]
 }
 
 interface LibraryState {

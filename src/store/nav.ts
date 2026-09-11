@@ -17,6 +17,7 @@ export type View =
   | { type: 'playlist'; id: string }
   | { type: 'liked' }
   | { type: 'ai' }
+  | { type: 'health' }
   | { type: 'ai-generated'; endpoint: string; title: string; subtitle?: string; gradient?: [string, string]; emoji?: string }
   | { type: 'mood'; mood: string; title: string; gradient: [string, string]; emoji: string }
 

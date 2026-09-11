@@ -31,15 +31,40 @@ export async function GET(req: NextRequest) {
     orderBy: { updatedAt: 'desc' },
     include: { tracks: { orderBy: { position: 'asc' }, include: { track: true }, take: 4 } },
   })
-  // Fetch full track counts in parallel (don't rely on the limited `take: 4` above)
-  const counts = await Promise.all(
-    pls.map((p) => db.playlistTrack.count({ where: { playlistId: p.id } }))
-  )
+  // Fetch full track counts + membership in parallel (don't rely on the limited `take: 4` above).
+  // Membership is what the sidebar needs to show its "this playlist is playing" indicator.
+  const [counts, ids] = await Promise.all([
+    Promise.all(pls.map((p) => db.playlistTrack.count({ where: { playlistId: p.id } }))),
+    Promise.all(
+      pls.map((p) =>
+        db.playlistTrack.findMany({
+          where: { playlistId: p.id },
+          select: { trackId: true },
+          orderBy: { position: 'asc' },
+        })
+      )
+    ),
+  ])
   return Response.json({
     playlists: pls.map((p, i) => ({
       ...p,
-      coverTracks: p.tracks.map((t) => t.track),
+      // Cover rows are consumed as PlayerTrack (Sidebar's "playing" indicator reads
+      // `.videoId`), so map Track → PlayerTrack here exactly like the ?id= branch does.
+      coverTracks: p.tracks
+        .map((t) => t.track)
+        .filter(Boolean)
+        .map((t: any) => ({
+          videoId: t.id,
+          title: t.title,
+          artistName: t.artistName,
+          artistId: t.artistId ?? undefined,
+          albumName: t.albumName ?? undefined,
+          albumId: t.albumId ?? undefined,
+          duration: t.duration ?? 0,
+          thumbnail: t.thumbnail ?? '',
+        })),
       trackCount: counts[i],
+      trackIds: ids[i].map((r) => r.trackId),
     })),
   })
 }

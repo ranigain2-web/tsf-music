@@ -13,6 +13,7 @@ import { LibraryView } from './LibraryView'
 import { LikedView } from './LikedView'
 import { PlaylistView } from './PlaylistView'
 import { AiGeneratedView } from './AiGeneratedView'
+import { EngineHealthView } from './EngineHealthView'
 
 export function Views() {
   const view = useNav((s) => s.view)
@@ -32,6 +33,8 @@ export function Views() {
       return <LikedView />
     case 'playlist':
       return <PlaylistView id={view.id} />
+    case 'health':
+      return <EngineHealthView />
     case 'ai-generated':
       return (
         <AiGeneratedView
