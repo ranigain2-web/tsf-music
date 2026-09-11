@@ -1019,3 +1019,32 @@ Work Log:
 
 Stage Summary:
 - Project fully understood A-Z AND live-ready in the new environment. All P0 chains proven: playback (full-length via POT+yt-dlp), search V2, MINDBEAT, AI home, lint/tsc/oracle green. One portability commit (63e8986) awaits push (CI will fire macos.yml on src/**). Watch-item: db/custom.db shows local modification (live DB writes from QA smokes — expected, do not commit unless intentional).
+
+---
+Task ID: 20
+Agent: Buffy (orchestrator) — user-reported fixes: Mac app slower than phone + Gatekeeper blocks every launch
+Task: Take the lead, verify everything end-to-end, root-cause and fix both user-reported problems, ship a release.
+
+Work Log:
+- Context restored from the other session's R8 commit (24932db, v0.4.0). Re-ran the full static + runtime sweep on HEAD before touching anything: lint 0 · tsc -p tsconfig.ci.json clean · Search-V2 oracle 29/29 · /api/ai/home 200 (11 shelves) · search-v2 NDJSON · mindbeat next-up real picks · /api/stream full-length (307 → googlevideo, valid fMP4) · R8 YouTube deep pagination (21 rows → continuation → 20 more). Environment rebuilt: bun deps, prisma client, POT provider :4416, yt-dlp + bgutil plugin.
+
+PROBLEM 2 — GATEKEEPER BLOCKS EVERY LAUNCH (root-caused):
+- CI only ever ad-hoc signed (`codesign --force --deep --sign -`). Ad-hoc signatures are not trusted by Gatekeeper, so the download is quarantined; the user must clear it by hand on EVERY new build (and each CI build is a new signature, so macOS prompts again).
+- Aggravating factor: launching from inside the mounted DMG. Files on a read-only DMG can never have `com.apple.quarantine` removed → blocked on every single open. That is the "it blocks every time" fingerprint.
+- FIX A (permanent, needs secrets): macos.yml now does real Developer ID signing + notarization + stapling when repo secrets exist (APPLE_SIGNING_IDENTITY, APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID). Notarizes+staples BOTH the app and the DMG (a ticket is bound to the submitted artifact — stapling the DMG requires submitting the DMG). Added src-tauri/entitlements.plist with allow-jit / allow-unsigned-executable-memory / disable-library-validation so the embedded Bun+Deno JITs survive the hardened runtime. Fixed a real bug I introduced: `$(date +%s)` was re-evaluated for create vs unlock, producing mismatched keychain passwords.
+- FIX B (works today, no Apple account): the Tauri shell detects a `TSF-Music-*.dmg` in `~/Downloads` and pushes a styled, actionable "you're running from the DMG — drag to /Applications and run First-Run once" hint onto the boot screen (`tsf-boot-hint` → www-fallback). Documented the exact cause + both paths in desktop/README-MACOS.md.
+
+PROBLEM 1 — MAC APP SLOWER THAN PHONE (root-caused + fixed):
+- Architecture: the phone streams from an ALWAYS-WARM server; the Mac shell boots its OWN COLD engine every launch (own Bun + Next standalone + POT + yt-dlp). Cold caches are the whole story. MEASURED on the production standalone server (the exact artifact the Mac bundles): warmed recent track → **307 in 6-9ms**; never-resolved track → **200 in 22.8s, then 12.3s**. That is the gap.
+- FIX 1 — boot warm-up (new src/instrumentation.ts, verified running in BOTH dev and production standalone): sequentially warms (a) the yt-dlp binary probe (absorbs macOS first-exec cost), (b) AI gateway config, (c) the /api/ai/home payload, (d) the stream resolver for the 3 most recent history tracks — i.e. exactly what Quick Picks serves first. Opt-out TSF_NO_WARMUP=1 / TSF_NO_STREAM_WARM=1; TSF_WARMUP_DEBUG=1 logs each stage. Deferred 750ms so it never delays the health gate (standalone: "Ready in 281ms", health 200).
+- FIX 2 — removed a per-launch tax mobile never pays: `strip_quarantine` ran `xattr -r -d` over the ENTIRE bundled resource tree (whole Next standalone server + Bun + yt-dlp + deno = tens of thousands of files) synchronously on every boot. It now probes bundle root / Resources root / own binary first and skips the recursive walk when the bundle is already clean.
+
+VERIFICATION (all live, none assumed):
+- Dev server: all four warm-up stages logged; StreamCache gained rows for all 3 recent YouTube history tracks (saavn-<id> correctly filtered by VIDEO_ID_RE).
+- Production standalone: boots, health 200, all four stages ok; warm vs cold resolve measured 6-9ms vs 22.8s.
+- Full `next build` green; instrumentation compiled into `.next/standalone/.next/server/instrumentation.js`.
+- YAML validated on every workflow edit; lint 0; tsc clean.
+- HONEST CAVEAT: the Developer ID/notarization path is implemented but UNVERIFIED on macOS (no macOS/cargo runner in this sandbox). It is dormant until the secrets exist, so the ad-hoc path — and the current working app — is unchanged. Validate one dispatch run before trusting it. Rust changes were reviewed line-by-line but could not be compiled locally (no cargo); macos.yml compiles them on push.
+
+Stage Summary:
+- Both user-reported problems addressed with evidence: Gatekeeper (permanent notarization path + today-usable DMG/First-Run mitigation + no more silent xattr sweep) and Mac-vs-phone speed (boot warm-up turning a 23s first tap into ~7ms, proven on the production engine artifact). Version bumped 0.4.0 → 0.4.1 in all four places (package.json, tauri.conf.json, Cargo.toml, Cargo.lock — the lock file had been left stale at 0.3.1 — plus Android versionCode 6).

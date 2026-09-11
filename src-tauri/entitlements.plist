@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    TSF Music bundles its own JavaScript runtimes as child processes:
+    Bun (runs the Next standalone server + the POT provider) and Deno (POT
+    helper). Both use a JIT, which macOS's hardened runtime blocks by default.
+    Without these keys a Developer ID-signed build is notarized successfully
+    but the embedded engine is killed at exec — the app opens to the boot
+    error screen. They are inert for the ad-hoc-signed builds.
+  -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+  <!-- Child helpers ship inside Contents/Resources and are signed with the
+       same identity; this lets the main binary load/exec them. -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>

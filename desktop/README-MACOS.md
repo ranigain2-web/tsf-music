@@ -30,20 +30,50 @@ Everything the web app does, the Mac app does — 100% local, no server needed.
 AI features additionally read `~/.z-ai-config` (same file the web version
 uses) when present.
 
-## Install (unsigned build)
+## Install
+
+**If the release is notarized** (repo has the signing secrets): download the
+DMG, drag **TSF Music** → **Applications**, launch. Nothing else. No prompts.
+
+**If the release is ad-hoc signed** (no secrets — the current default):
 
 1. Download `TSF-Music-*-x64.dmg` (Intel) from the release/artifacts.
 2. Open the DMG, drag **TSF Music** → **Applications**.
 3. Double-click **First-Run-MacOS.command** (in the same DMG) once.
    It removes the Gatekeeper quarantine flag (macOS Sequoia/Tahoe removed
    right-click→Open for unsigned apps; this script is the sanctioned path).
-4. Launch from Launchpad. First launch boots the engine (~5 s).
+4. Launch from **Launchpad / Applications** — never from inside the DMG.
+   First launch boots the engine (~5 s).
 
-> Signing/notarization: the workflow auto-activates real Developer ID signing
-> + notarization if these secrets exist: `APPLE_SIGNING_IDENTITY`,
-> `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`,
-> `APPLE_PASSWORD`, `APPLE_TEAM_ID`. Without them it ships ad-hoc-signed
-> (which is why step 3 exists).
+### Why it gets blocked EVERY launch (and how to stop it)
+
+Almost always this means the app is being launched **from inside the mounted
+DMG**, or re-downloaded each time:
+
+* A file on a read-only DMG can never have its quarantine flag removed, so
+  macOS re-assesses and re-blocks it on every open.
+* Every fresh download is a *new* build with a *new* ad-hoc signature, so
+  macOS treats it as a brand-new app and asks again.
+
+Fix: **install to /Applications** (drag it out), run First-Run once, then
+launch from /Applications. From v0.4.1 the app detects a `TSF-Music-*.dmg` in
+`~/Downloads` and shows this exact instruction on its boot screen.
+
+> **Permanent fix — Developer ID signing + notarization.** The macOS workflow
+auto-activates it when these repo secrets exist: `APPLE_SIGNING_IDENTITY`,
+> `APPLE_CERTIFICATE` (base64-encoded `.p12`), `APPLE_CERTIFICATE_PASSWORD`,
+> `APPLE_ID`, `APPLE_PASSWORD` (app-specific password), `APPLE_TEAM_ID`.
+> Requires a paid Apple Developer Program membership ($99/yr) — this is an
+> Apple requirement, not a TSF one. Notarized downloads open with **no**
+> prompt and no First-Run script, on any Mac. The pipeline signs every nested
+> helper (`bun`, `yt-dlp`, `deno`, the POT provider) and applies
+> `src-tauri/entitlements.plist` so the embedded JS runtimes survive the
+> hardened runtime.
+>
+> **Status: implemented but not yet validated on a macOS runner** — it is
+> dormant until the secrets are added. Validate one dispatch run before
+> trusting it; the ad-hoc path remains the fallback and still ships a working
+> app.
 
 ## Logs / data
 
@@ -67,7 +97,23 @@ still fails:
 2. Check the two log files above — the last lines name the real cause.
 3. Re-run `First-Run-MacOS.command` from the DMG (strips quarantine on the
    whole app, including everything else), then Retry.
-4. Still stuck? Open an issue with both log files attached.
+4. Confirm the app is in **/Applications**, not still on the DMG.
+5. Still stuck? Open an issue with both log files attached.
+
+**"The Mac app feels slower than the phone"**
+
+The Mac app boots its own private engine on every launch, while the phone
+streams from an always-running server whose caches are already warm — so the
+first minute after launch is inherently the cold one. v0.4.1 cuts that:
+
+* The recursive `xattr -r` quarantine walk over the whole bundle no longer
+  runs on a clean install (it used to stat every file before the engine even
+  started).
+* On boot the engine now warms the yt-dlp binary, the AI gateway config, the
+  home feed, and the stream resolver for your most recent tracks — so your
+  first tap after launch is served from a warm cache.
+* Set `TSF_NO_WARMUP=1` (or `TSF_NO_STREAM_WARM=1`) to disable, and
+  `TSF_WARMUP_DEBUG=1` to log warm-up steps to `server.log`.
 
 Historical note (fixed in v0.1.1): the first release built its database URL
 from the unencoded `~/Library/Application Support/...` path — the space broke
@@ -85,7 +131,10 @@ Prisma's `file:` URL parsing on every Mac. It is now percent-encoded
 | AI playlists / discover | web QA evidence (agent-browser) + engine identity |
 | Native Now Playing / media keys | souvlaki in Rust shell (code + cargo check) |
 | Background audio | `NSAppSleepDisabled` in Info.plist (Tahoe-safe) |
-| Both CPU archs | matrix build (x64 + arm64), ad-hoc signed |
+| Both CPU archs | matrix build (x64 + arm64) |
+| Nested helper signatures | `Codesign` step audits each nested Mach-O; notarization fails on any unsigned binary |
+| Quarantine self-heal is cheap | walks only when the bundle is actually quarantined |
+| Boot warm-up runs | `TSF_WARMUP_DEBUG=1` logs each stage; verified live in the dev sandbox |
 
 ## Local development (Mac, without CI)
 

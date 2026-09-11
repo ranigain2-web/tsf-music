@@ -26,7 +26,7 @@ use souvlaki::{
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -139,6 +139,30 @@ fn encode_file_url(p: &std::path::Path) -> String {
     out
 }
 
+/// Cheap single-path probe: does this path carry the quarantine flag?
+fn is_quarantined(p: &Path) -> bool {
+    Command::new("/usr/bin/xattr")
+        .arg("-p")
+        .arg("com.apple.quarantine")
+        .arg(p)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// The enclosing `*.app` bundle of the running executable, if any.
+fn app_bundle_root() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    for anc in exe.ancestors() {
+        if anc.extension() == Some(std::ffi::OsStr::new("app")) {
+            return Some(anc.to_path_buf());
+        }
+    }
+    None
+}
+
 /// Self-heal Gatekeeper: a downloaded bundle carries the
 /// `com.apple.quarantine` xattr on EVERY nested file. The main binary gets
 /// unblocked by the user ("Allow Anyway" / First-Run script), but spawned
@@ -148,13 +172,65 @@ fn encode_file_url(p: &std::path::Path) -> String {
 /// Resources needs no privileges (we own the files) and makes the engine
 /// boot even if the user never ran First-Run-MacOS.command.
 fn strip_quarantine(app: &AppHandle) {
-    if let Ok(root) = res(app, "") {
-        let _ = Command::new("/usr/bin/xattr")
-            .args(["-r", "-d", "com.apple.quarantine"])
-            .arg(&root)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
+    let Ok(root) = res(app, "") else { return };
+
+    // PERF — a real contributor to "the Mac app feels slow to start":
+    // `xattr -r` walks and stats EVERY file under Resources (bundled Bun
+    // runtime, the entire Next standalone server tree, yt-dlp, deno) — tens
+    // of thousands of files — synchronously, BEFORE the engine is spawned.
+    // Desktop is the only shell that pays this cost, and the flag only exists
+    // on a freshly downloaded bundle. Probe the three paths that would carry
+    // it (bundle root, Resources root, our own binary) and skip the whole
+    // recursive walk when the bundle is already clean.
+    let bundle_q = match app_bundle_root() {
+        Some(b) => is_quarantined(&b),
+        None => false,
+    };
+    let exe_q = match std::env::current_exe() {
+        Ok(p) => is_quarantined(&p),
+        Err(_) => false,
+    };
+    if !(bundle_q || is_quarantined(&root) || exe_q) {
+        return; // nothing to heal — never pay the recursive walk
+    }
+
+    let _ = Command::new("/usr/bin/xattr")
+        .args(["-r", "-d", "com.apple.quarantine"])
+        .arg(&root)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
+/// Detect a downloaded TSF DMG lingering in ~/Downloads. Its presence is the
+/// strongest signal the user is launching straight from the mounted DMG (or
+/// re-downloading) instead of installing to /Applications — the #1 cause of
+/// repeated Gatekeeper "app is blocked" prompts: every fresh DMG copy
+/// re-carries the quarantine xattr, and files on a read-only DMG can NEVER be
+/// un-quarantined. We surface an actionable First-Run hint on the boot screen
+/// instead of leaving the user to discover Privacy Settings each launch.
+fn dmg_in_downloads() -> bool {
+    let Some(home) = std::env::var_os("HOME") else { return false };
+    let mut dl = PathBuf::from(home);
+    dl.push("Downloads");
+    let Ok(rd) = std::fs::read_dir(&dl) else { return false };
+    for e in rd.flatten() {
+        if let Some(name) = e.file_name().to_str() {
+            if name.starts_with("TSF-Music-") && name.ends_with(".dmg") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// One-time actionable hint (DMG-detection) pushed to the boot page.
+fn post_boot_hint(win: Option<&WebviewWindow>, text: &str) {
+    if let Some(win) = win {
+        let detail = json!({ "text": text });
+        let _ = win.eval(&format!(
+            "window.dispatchEvent(new CustomEvent('tsf-boot-hint', {{ detail: {detail} }}))"
+        ));
     }
 }
 
@@ -298,6 +374,18 @@ fn server_exit_message(app: &AppHandle) -> Option<String> {
 fn boot_services_inner(app: &AppHandle, win: Option<&WebviewWindow>) -> Result<u16, String> {
     boot_status(win, "Preparing the local engine…");
     strip_quarantine(app);
+
+    // Running-from-DMG detector: a TSF DMG in ~/Downloads means the user is
+    // double-clicking the app inside the mounted image (or re-downloading) —
+    // the exact pattern that produces "Apple verifies then blocks it, I have
+    // to allow it in Privacy Settings EVERY launch". Tell them the 30-second
+    // permanent fix instead of letting them fight Gatekeeper forever.
+    if dmg_in_downloads() {
+        post_boot_hint(
+            win,
+            "Tip: you're running TSF Music from the downloaded DMG — macOS re-blocks it every launch. \nDrag the app into /Applications, then double-click First-Run-MacOS.command once from the DMG. That makes it open normally forever.",
+        );
+    }
 
     let runtime_bun = res(app, "resources/runtime/bun")?;
     let server_dir = res(app, "resources/server")?;

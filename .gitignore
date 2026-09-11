@@ -73,3 +73,5 @@ src-tauri/gen/schemas/
 probe-report.json
 tool-results/
 HANDOVER.md
+# agent tooling state
+.opencode/
