@@ -75,3 +75,9 @@ tool-results/
 HANDOVER.md
 # agent tooling state
 .opencode/
+# research scratch — third-party repos cloned here for study carry their own
+# git history. Committing them as bare gitlinks (mode 160000 with no
+# .gitmodules entry) makes EVERY checkout fail with "fatal: No url found for
+# submodule path" — keep them untracked.
+tsf-analysis/gauntlet-loop/
+tsf-analysis/kira/

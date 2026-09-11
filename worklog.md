@@ -1069,3 +1069,18 @@ Work Log:
 
 Stage Summary:
 - Final HEAD verified end-to-end rather than assumed: static + every runtime surface + real audio bytes on both the YouTube and JioSaavn paths. v0.4.1 released. The one unresolved item is still the honest one from Task 20: the notarization pipeline is implemented but dormant (needs the six Apple secrets) and therefore unvalidated on a real signing run — until then, ad-hoc signing + the DMG/First-Run hint + the curl install path are what the user has.
+- RELEASE VERIFIED BY INSPECTING THE SHIPPED ARTIFACT (not the build logs): downloaded TSF-Music-0.4.1-x64.zip from the release and inspected it. `Info.plist` = 0.4.1 / `com.tsfmusic.desktop`; `_CodeSignature/CodeResources` present and the CI step logged `▶ No signing secrets — ad-hoc (First-Run script still required)` + `codesign OK` on BOTH architectures, so the release is ad-hoc signed exactly as documented. The app bundles `resources/bin/{yt-dlp,deno}`, `resources/runtime/bun`, `pot-provider/`, the Next standalone tree and — proof the warm-up actually ships — `resources/server/.next/server/instrumentation.js`. Bundled `db/tsf.db` is a clean 200 KB schema-only DB (the 52 MB dev DB is NOT shipped).
+- CI probe on the tag: 20-track gauntlet `preview: 9  synth: 0  failed: 0` → ✅ PASS (9/9 Indian-catalog tracks FULL jiosaavn 320kbps at 785-1002ms; the 9 international tracks honestly degraded to itunes-preview because the runner is a datacenter IP — the known SABR wall, not a regression).
+
+---
+Task ID: 22
+Agent: Buffy (orchestrator) — repo hygiene bug found in the CI logs
+Task: Fix the broken-submodule error that fires on every checkout.
+
+Work Log:
+- Found while reading the release run's logs: `fatal: No url found for submodule path 'tsf-analysis/gauntlet-loop' in .gitmodules` on every actions/checkout. `tsf-analysis/gauntlet-loop` and `tsf-analysis/kira` were committed as bare gitlinks (mode 160000) with no `.gitmodules` entry — leftovers from the research sessions that cloned those repos. Any clone, CI checkout or future `git submodule` operation trips over it.
+- Fix: `git rm --cached` both gitlink entries (the local dirs are empty; their history was never in this repo) and added them to .gitignore with the reason. Verified `git ls-files -s` now reports zero 160000 entries.
+- Also noted (NOT changed — flagged for the user): `tsf-analysis/` is committed and is ~714 files of research scratch, including full duplicate copies of the app source (`main/TSF-MUSIC-main/**`, `web/tsf-music/**`) and the QA screenshots the worklog cites. It does not affect the build but it does bloat every clone. Removing/ignoring it is a product decision, not a bug fix.
+
+Stage Summary:
+- Checkout is clean again. Product code untouched this round; all changes are repo/docs hygiene.
