@@ -1105,3 +1105,19 @@ Task ID: 23 — FINDING (run 34615731701, live on macOS runners): the audit imme
 
 Stage Summary:
 - No behaviour change for the shipped ad-hoc build; the Developer ID path now fails loudly in CI at build time instead of silently at Apple's notary review — and the specific helpers that would have caused that rejection are now signed explicitly.
+
+---
+Task ID: 24
+Agent: Buffy (orchestrator) — repo history rewrite (user-approved)
+Task: Purge tsf-analysis/ from the entire git history to shrink the repo.
+
+Work Log:
+- Measured BEFORE acting: 712 of 1156 tracked files lived under tsf-analysis/, and those blobs accounted for ~31 MB of raw content — almost all of it already-compressed PNG QA screenshots, which do not delta-compress, so they dominated the 44 MB pack. Verified the win was real before rewriting anything.
+- Safety first: `git clone --mirror . /tmp/tsf-backup.git` (full refs incl. every tag) plus a copy of the live dev DB before touching anything. Recorded every pre-rewrite ref SHA.
+- `git filter-branch --index-filter 'git rm -r --cached --ignore-unmatch tsf-analysis' --prune-empty --tag-name-filter cat -- --all` — then removed `refs/original`, expired the reflog and ran `git gc --prune=now --aggressive`.
+- RESULT: tracked files 1156 → 444 (= exactly the 712 dropped), pack **44.25 MiB → 15.42 MiB**, one commit dropped (a commit that only ever touched tsf-analysis became empty; `--prune-empty` removed it), zero tsf-analysis objects left in `rev-list --objects --all`. All five tags rewritten and force-pushed; `main` 9ec6a83 → 20b0982.
+- BLAST RADIUS CHECKED, not assumed: after the force-push the releases page still shows v0.4.1 (Latest, not a draft, all 7 assets intact) plus v0.3.1/v0.3.0/v0.1.1/v0.1.0 — no release was recreated or lost, and the tag force-push did NOT fan out into tag-triggered workflow runs. A fresh `git clone` confirms 444 files, no tsf-analysis, 16 MB .git.
+- OPERATIONAL NOTE FOR ANY EXISTING CLONE (including the other agent session): history was rewritten, so old clones must be re-cloned or hard-reset — `git fetch origin && git reset --hard origin/main`. The files under tsf-analysis/ remain on this machine untouched (now untracked); the mirror backup lives at /tmp/tsf-backup.git until it is cleared.
+
+Stage Summary:
+- Repo is 65% smaller and no longer carries two duplicate copies of its own source plus research scratch. Nothing outside tsf-analysis/ was touched: same 444 product files, same content, same tags, same release.
