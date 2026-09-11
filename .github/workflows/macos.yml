@@ -174,11 +174,40 @@ jobs:
             # ADD our keychain, do not clobber the runner's default search list.
             security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
             rm -f "$CERT_P12"
-            # --deep signs the nested helpers (bun / yt-dlp / deno / the POT
-            # provider) too, which notarization REQUIRES: an unsigned Mach-O
-            # anywhere in the bundle fails the notary review. The entitlements
-            # keep the embedded JIT runtimes alive under the hardened runtime.
-            codesign --force --deep --options runtime --timestamp \
+            # -----------------------------------------------------------------
+            # INSIDE-OUT SIGNING. `codesign --deep` only descends into the
+            # standard nested-code locations (Frameworks / PlugIns / MacOS).
+            # Every helper TSF ships lives under Contents/Resources — the
+            # bundled bun / deno / yt-dlp, the POT provider's canvas.node, the
+            # Prisma query engines — and is INVISIBLE to --deep. Measured on
+            # the ad-hoc build below: 4 of 6 Mach-O helpers come out with no
+            # Developer ID authority, which is exactly what makes notarytool
+            # reject an otherwise clean upload. So sign each helper first, then
+            # seal the bundle around them (a helper signature invalidates the
+            # bundle seal, so the order matters).
+            # Helpers that already carry a Developer ID signature from their
+            # publisher (bun, deno) are left alone: overwriting a valid team
+            # signature is unnecessary and risks breaking their JIT.
+            # -----------------------------------------------------------------
+            HELPER_FAIL=0
+            while IFS= read -r f; do
+              [ -n "$f" ] || continue
+              file -b "$f" | grep -q "Mach-O" || continue
+              if codesign -dv --verbose=4 "$f" 2>&1 | grep -q "Authority=Developer ID Application"; then
+                echo "  keep $f"
+                continue
+              fi
+              if codesign --force --options runtime --timestamp \
+                   --entitlements src-tauri/entitlements.plist \
+                   --keychain "$KC" --sign "$APPLE_SIGNING_IDENTITY" "$f"; then
+                echo "  sign $f"
+              else
+                echo "::error title=Helper signing failed::$f could not be signed — notarization would reject this bundle."
+                HELPER_FAIL=1
+              fi
+            done < <(find "$APP/Contents/Resources" -type f -perm -u+x 2>/dev/null)
+            [ "$HELPER_FAIL" -eq 0 ] || exit 1
+            codesign --force --options runtime --timestamp \
               --entitlements src-tauri/entitlements.plist \
               --keychain "$KC" --sign "$APPLE_SIGNING_IDENTITY" "$APP"
             SIGNED=1

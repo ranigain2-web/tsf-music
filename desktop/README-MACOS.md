@@ -91,6 +91,21 @@ The pipeline signs every nested helper (`bun`, `yt-dlp`, `deno`, the POT
 provider) and applies `src-tauri/entitlements.plist` so the embedded JS
 runtimes survive the hardened runtime.
 
+Two signing details that are easy to get wrong, both handled in `macos.yml`:
+
+* **`--deep` does not reach our helpers.** It only descends into
+  `Contents/Frameworks`, `Contents/PlugIns` and `Contents/MacOS`; everything
+  TSF bundles lives under `Contents/Resources` (`bin/yt-dlp`, `runtime/bun`,
+  `bin/deno`, `pot-provider/…/canvas.node`, the Prisma query engines). A
+  `--deep`-only bundle leaves those unsigned and Apple's notary rejects the
+  upload. CI therefore signs each helper **inside-out first**, then seals the
+  bundle. `bun` and `deno` already ship a valid Developer ID signature from
+  their publishers and are deliberately left untouched.
+* **CI reports what it signed.** The codesign step audits every Mach-O under
+  `Contents/Resources` and prints `ok` / `MISS` per file, so an unsigned
+  helper is visible in the build log instead of surfacing later as an opaque
+  notary rejection.
+
 > **Status: implemented but not yet validated on a macOS runner** — it is
 dormant until the secrets are added. Validate one dispatch run before trusting
 it; the ad-hoc path remains the fallback and still ships a working app.
