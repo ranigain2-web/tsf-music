@@ -1084,3 +1084,17 @@ Work Log:
 
 Stage Summary:
 - Checkout is clean again. Product code untouched this round; all changes are repo/docs hygiene.
+
+---
+Task ID: 23
+Agent: Buffy (orchestrator) — dormant-path hardening in the macOS signing step
+Task: Make the nested-codesign audit tell the truth, and make it run on every build so it is actually exercised.
+
+Work Log:
+- Found by reading my own v0.4.1 signing step: the "inside-out proof" audit printed `codesign -dv "$f" | head -1`, and line 1 of `codesign -dv` is `Executable=<path>` — so it printed the path twice and verified NOTHING about whether nested Mach-Os carried the Developer ID identity. A no-op audit that reads like a real check.
+- Also found that it lived inside the `if [ secrets exist ]` branch, so it could never run in the ad-hoc path — i.e. it could not be tested without buying an Apple account, and no run had ever executed it.
+- Fix: the audit moved out of the branch (after `codesign --verify`), uses `file -b` to select Mach-O files only (so +x shell scripts don't produce false alarms), greps `codesign -dv --verbose=4` for `Authority=Developer ID Application`, counts both totals, and emits a `::warning::` naming the count only when we genuinely signed with a Developer ID (`SIGNED=1`). A false positive can no longer block a release.
+- Verification this round: YAML parses (PyYAML), the extracted `run:` block passes `bash -n`, and the counter logic was dry-run against a fixture directory. The code path itself executes on the next branch push — which is the point of moving it.
+
+Stage Summary:
+- No behaviour change for the shipped ad-hoc build; the Developer ID path now fails loudly (as a warning) in CI at build time instead of silently at Apple's notary review.
