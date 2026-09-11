@@ -181,10 +181,30 @@ jobs:
             codesign --force --deep --options runtime --timestamp \
               --entitlements src-tauri/entitlements.plist \
               --keychain "$KC" --sign "$APPLE_SIGNING_IDENTITY" "$APP"
-            # Inside-out proof: every nested Mach-O must carry the identity.
-            echo "--- nested signature audit ---"
-            find "$APP/Contents/Resources" -type f -perm -u+x 2>/dev/null | head -20 | \
-              while read -r f; do codesign -dv "$f" 2>&1 | head -1 | sed "s|^|  $f: |"; done || true
+            # Inside-out proof: notarization rejects the whole submission if ANY
+            # nested Mach-O (bun, deno, yt-dlp, the native POT/provider modules)
+            # is not signed with the Developer ID identity. Audit every Mach-O
+            # under Resources and report the ones that would fail the notary.
+            # Deliberately does NOT fail the build here — a false positive must
+            # not block a release; the warning names the exact binaries.
+            echo "--- nested signature audit (Mach-O only) ---"
+            UNSIGNED=0
+            AUDITED=0
+            while IFS= read -r f; do
+              [ -n "$f" ] || continue
+              file -b "$f" | grep -q "Mach-O" || continue
+              AUDITED=$((AUDITED + 1))
+              if codesign -dv --verbose=4 "$f" 2>&1 | grep -q "Authority=Developer ID Application"; then
+                echo "  ok   $f"
+              else
+                UNSIGNED=$((UNSIGNED + 1))
+                echo "  MISS $f"
+              fi
+            done < <(find "$APP/Contents/Resources" -type f -perm -u+x 2>/dev/null)
+            echo "audited ${AUDITED} Mach-O helper(s); ${UNSIGNED} without a Developer ID signature"
+            if [ "$UNSIGNED" -ne 0 ]; then
+              echo "::warning title=Nested helpers not Developer ID signed::${UNSIGNED} of ${AUDITED} Mach-O helpers under Contents/Resources lack a Developer ID signature — notarization will reject this build. Sign them with the same identity (or use a --deep --force re-sign) before submitting."
+            fi
             echo "TSF_SIGNED=1" >> "$GITHUB_ENV"
           else
             echo "▶ No signing secrets — ad-hoc (First-Run script still required)"
