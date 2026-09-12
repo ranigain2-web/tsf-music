@@ -8,18 +8,18 @@ via GitHub Actions.
 > Bun runtime + yt-dlp + POT token provider) powers 100% of the features on
 > every platform. No external backend needed.
 
-**Current release: [`v0.4.3`](https://github.com/ranigain2-web/tsf-music/releases/latest)**
+**Current release: [`v0.4.4`](https://github.com/ranigain2-web/tsf-music/releases/latest)**
 
 | File | Platform | Size |
 |---|---|---|
-| `TSF-Music-0.4.3-x64.dmg` | **macOS Intel** (MacBook Pro 16" 2019 i9 ✓, macOS 26 Tahoe) | ~287 MB |
-| `TSF-Music-0.4.3-arm64.dmg` | macOS Apple Silicon | ~271 MB |
-| `TSF-Music-0.4.3-x64.zip` / `-arm64.zip` | macOS, zipped bundle | — |
+| `TSF-Music-0.4.4-x64.dmg` | **macOS Intel** (MacBook Pro 16" 2019 i9 ✓, macOS 26 Tahoe) | ~287 MB |
+| `TSF-Music-0.4.4-arm64.dmg` | macOS Apple Silicon | ~271 MB |
+| `TSF-Music-0.4.4-x64.zip` / `-arm64.zip` | macOS, zipped bundle | — |
 | `SHA256SUMS.txt` | checksums the installer verifies against | — |
 | `app-release-unsigned.apk` | Android 6.0+ | — |
 | `tsf-music-ios-unsigned.ipa` | iOS (sideload) | — |
 
-## What changed in 0.4.3
+## What changed in 0.4.4
 
 Five things were reported from real use. All five are fixed, each with a
 reproduction first — none of them were "made better" by guessing.
@@ -75,7 +75,7 @@ It is **idempotent**: re-running it is a safe upgrade. Options:
 
 | Env var | Effect |
 | --- | --- |
-| `TSF_TAG=v0.4.3` | install a specific release instead of the newest |
+| `TSF_TAG=v0.4.4` | install a specific release instead of the newest |
 | `TSF_DEST=~/Applications` | install somewhere other than `/Applications` |
 | `TSF_NO_LAUNCH=1` | install without opening the app |
 | `TSF_FORCE=1` | reinstall even when that version is already present |
@@ -101,7 +101,7 @@ Confirm which version is installed, at any time:
 
 ```bash
 defaults read "/Applications/TSF Music.app/Contents/Info.plist" CFBundleShortVersionString
-# → 0.4.3
+# → 0.4.4
 ```
 
 ## Step 3 — Launch and use it
@@ -113,7 +113,7 @@ first run, faster afterwards.
 The engine warms itself while it boots (it probes `yt-dlp`, preloads the AI
 gateway config and renders the home feed), then — only once you have been quiet
 for a moment — resolves your single most recent track, so it never competes
-with the audio you are waiting on. The sidebar badge should read **v0.4.3**.
+with the audio you are waiting on. The sidebar badge should read **v0.4.4**.
 
 First-run notes:
 
@@ -210,7 +210,7 @@ tells us everything without needing another round of questions.
 
 | # | Check | Where | Expected |
 |---|---|---|---|
-| 1 | Version | sidebar bottom badge | `v0.4.3` |
+| 1 | Version | sidebar bottom badge | `v0.4.4` |
 | 2 | Engine is up | the app window opened at all | it health-gates on `/api/health`, so a visible window means the engine answered. The doctor (Step 5) prints the health block explicitly |
 | 3 | Diagnostics exist | sidebar → **Engine health** | provider table with names, latencies, a "live" count. The resolve block also shows **user resolves** vs. **warm stand-downs** |
 | 4 | What you'd actually get | Engine health → **Test playback** with any id | a verdict naming the provider: *full-length* / *30 s preview* / *offline synth* |
@@ -262,7 +262,7 @@ launch** — its own Bun + Next + POT provider + yt-dlp — and starts cold.
 Measured on the exact engine the app bundles: a warmed track resolves in
 **6–9 ms** versus **~22 s** cold.
 
-But part of it was a straight bug, and **0.4.3 fixes it**. The engine had no
+But part of it was a straight bug, and **0.4.4 fixes it**. The engine had no
 notion of *your* audio versus *background* work: the boot warm raced three
 recent tracks the moment the engine came up, and the client's "Deep Warm"
 re-raced the playing track *plus the next five* while you listened. Both
@@ -271,7 +271,7 @@ was being warmed at that moment started a **second** full resolve and queued
 behind the first for the two yt-dlp process slots (each up to 25 s). That is
 exactly the shape of "it is slow at the start and sorts itself out later".
 
-What 0.4.3 does about it:
+What 0.4.4 does about it:
 
 - Background resolves **join** a resolve already running for the same track
   instead of starting a duplicate.

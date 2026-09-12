@@ -24,6 +24,15 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.4.4',
+    title: 'Background work records every play it should yield to',
+    date: '2026-09-12',
+    items: [
+      'Playing a catalog (JioSaavn) result now counts as listening, exactly like a YouTube-backed track does — the background warmer used to miss it and could still start racing while you were listening',
+      'Same for saving a catalog track to disk',
+    ],
+  },
+  {
     version: '0.4.3',
     title: 'Search that reads what you meant, and downloads you can watch',
     date: '2026-09-12',

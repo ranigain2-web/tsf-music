@@ -19,7 +19,7 @@
  * the client a real length up front and real progress from the first byte.
  */
 import { NextRequest } from 'next/server'
-import { resolveStream, type StreamResult } from '@/lib/ytm/stream'
+import { resolveStream, noteUserResolve, type StreamResult } from '@/lib/ytm/stream'
 import { resolveSaavnById } from '@/lib/ytm/jiosaavn'
 
 export const dynamic = 'force-dynamic'
@@ -72,6 +72,9 @@ async function resolveForDownload(
   durationSec: number,
 ): Promise<StreamResult> {
   if (SAAVN_ID_RE.test(videoId)) {
+    // Foreground stamp: this branch answers from the catalog without going
+    // through resolveStream, and a download is unambiguously user-initiated.
+    noteUserResolve()
     const saavn = await resolveSaavnById(videoId).catch(() => null)
     if (saavn) return saavn
   }

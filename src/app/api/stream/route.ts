@@ -24,7 +24,7 @@
  * degraded sources truthfully.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { resolveStream, purgeVideoId } from '@/lib/ytm/stream'
+import { resolveStream, purgeVideoId, noteUserResolve } from '@/lib/ytm/stream'
 import { VIDEO_ID_RE } from '@/lib/ytm/ytdlp'
 import { resolveSaavnById } from '@/lib/ytm/jiosaavn'
 
@@ -90,7 +90,14 @@ export async function GET(req: NextRequest) {
   }
 
   // 1b. JioSaavn catalog-id resolve — deterministic full-length 320 kbps.
+  //
+  // FOREGROUND PRIORITY: this branch answers straight from the catalog without
+  // going through resolveStream, so it has to stamp user activity itself —
+  // otherwise playing a `saavn-<id>` row (which is most of the search
+  // pagination results) left the background warmers believing nobody was
+  // listening, and they would happily keep racing behind the user's back.
   if (SAAVN_ID_RE.test(videoId)) {
+    if (!isHead) noteUserResolve()
     if (isHead) {
       const h = new Headers({ 'X-Stream-Provider': 'jiosaavn' })
       h.set('Content-Length', '0')
