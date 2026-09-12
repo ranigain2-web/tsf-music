@@ -8,16 +8,34 @@ via GitHub Actions.
 > Bun runtime + yt-dlp + POT token provider) powers 100% of the features on
 > every platform. No external backend needed.
 
-**Current release: [`v0.4.2`](https://github.com/ranigain2-web/tsf-music/releases/latest)**
+**Current release: [`v0.4.3`](https://github.com/ranigain2-web/tsf-music/releases/latest)**
 
 | File | Platform | Size |
 |---|---|---|
-| `TSF-Music-0.4.2-x64.dmg` | **macOS Intel** (MacBook Pro 16" 2019 i9 ✓, macOS 26 Tahoe) | ~287 MB |
-| `TSF-Music-0.4.2-arm64.dmg` | macOS Apple Silicon | ~271 MB |
-| `TSF-Music-0.4.2-x64.zip` / `-arm64.zip` | macOS, zipped bundle | — |
+| `TSF-Music-0.4.3-x64.dmg` | **macOS Intel** (MacBook Pro 16" 2019 i9 ✓, macOS 26 Tahoe) | ~287 MB |
+| `TSF-Music-0.4.3-arm64.dmg` | macOS Apple Silicon | ~271 MB |
+| `TSF-Music-0.4.3-x64.zip` / `-arm64.zip` | macOS, zipped bundle | — |
 | `SHA256SUMS.txt` | checksums the installer verifies against | — |
 | `app-release-unsigned.apk` | Android 6.0+ | — |
 | `tsf-music-ios-unsigned.ipa` | iOS (sideload) | — |
+
+## What changed in 0.4.3
+
+Five things were reported from real use. All five are fixed, each with a
+reproduction first — none of them were "made better" by guessing.
+
+| Report | Root cause | Now |
+|---|---|---|
+| Typing `tu chahiye` produced `tuchahiye` | the search box's live-update debounce pushed a *trimmed* copy into the view state and the sync effect wrote it straight back, deleting the space mid-word | an echo guard adopts the outside value only when the app did not push it — the space survives normal typing |
+| `tuchaiye` / `tumhiho` found **nothing** | the engine only fell back to a corrected reading when a query returned *too few* rows; a glued query returns rows, just none that match, so nothing was corrected | a recognition layer (glue-split, romanization fold, spelling, provider suggest) reads the query, searches what you meant, keeps your literal hits behind it, and labels it **"Showing results for …"** |
+| `taylor swif` returned songs *about* Taylor Swift | same trigger, worse symptom: the literal set was large, so the correction never ran, and "Taylor Swift Masala" outranked her actual recordings | a match-quality trigger now takes over — the top rows are her recordings, credited to her |
+| 5–10 s per song on the Mac, worst right after launch | the boot warm and the client's "Deep Warm" re-raced tracks with the cache bypassed *and* bypassed the in-flight map, so a tap on a track that was being warmed started a **second** race and queued behind it for the 2 yt-dlp process slots | background work now joins in-flight work, stands down while you are listening, and the boot warm waits for a real quiet window before racing a single track |
+| Downloads saved silently | the only progress affordance lived inside the row's hover state (invisible the moment your pointer moved) and four copies of a buffer-everything fetch reported nothing — plus `saavn-…` rows fell back to the *synthesizer* | one shared manager: live percentage, real size, clear Downloaded / Failed state on every surface, streamed response, and the real catalog track for `saavn-…` rows |
+
+Nothing about the honest-labelling contract changed: a track is still badged
+**emerald** (full-length), **amber** (30 s preview) or **slate** (synth), and
+the new "Showing results for …" label can always be switched back with one tap
+(*Search instead for "…"*).
 
 ---
 
@@ -57,7 +75,7 @@ It is **idempotent**: re-running it is a safe upgrade. Options:
 
 | Env var | Effect |
 | --- | --- |
-| `TSF_TAG=v0.4.2` | install a specific release instead of the newest |
+| `TSF_TAG=v0.4.3` | install a specific release instead of the newest |
 | `TSF_DEST=~/Applications` | install somewhere other than `/Applications` |
 | `TSF_NO_LAUNCH=1` | install without opening the app |
 | `TSF_FORCE=1` | reinstall even when that version is already present |
@@ -83,7 +101,7 @@ Confirm which version is installed, at any time:
 
 ```bash
 defaults read "/Applications/TSF Music.app/Contents/Info.plist" CFBundleShortVersionString
-# → 0.4.2
+# → 0.4.3
 ```
 
 ## Step 3 — Launch and use it
@@ -93,9 +111,9 @@ local engine and shows the window once `/api/health` answers — a few seconds o
 first run, faster afterwards.
 
 The engine warms itself while it boots (it probes `yt-dlp`, preloads the AI
-gateway config, renders the home feed and resolves your three most recent
-tracks), so the first thing you tap is served from a warm cache. The sidebar
-badge should read **v0.4.2**.
+gateway config and renders the home feed), then — only once you have been quiet
+for a moment — resolves your single most recent track, so it never competes
+with the audio you are waiting on. The sidebar badge should read **v0.4.3**.
 
 First-run notes:
 
@@ -192,13 +210,17 @@ tells us everything without needing another round of questions.
 
 | # | Check | Where | Expected |
 |---|---|---|---|
-| 1 | Version | sidebar bottom badge | `v0.4.2` |
+| 1 | Version | sidebar bottom badge | `v0.4.3` |
 | 2 | Engine is up | the app window opened at all | it health-gates on `/api/health`, so a visible window means the engine answered. The doctor (Step 5) prints the health block explicitly |
-| 3 | Diagnostics exist | sidebar → **Engine health** | provider table with names, latencies, a "live" count |
+| 3 | Diagnostics exist | sidebar → **Engine health** | provider table with names, latencies, a "live" count. The resolve block also shows **user resolves** vs. **warm stand-downs** |
 | 4 | What you'd actually get | Engine health → **Test playback** with any id | a verdict naming the provider: *full-length* / *30 s preview* / *offline synth* |
 | 5 | Real playback | play **Daily Mix 1** | audio starts; the badge under the title is **emerald** for full-length, **amber** for a 30 s preview, **slate** for synth |
 | 6 | Something to compare against | Search → any song you know | if the catalog has it, expect *full-length* |
-| 7 | Whole-health snapshot | Step 5 doctor | the block below |
+| 7 | **Search takes spaces** | Search → type `tu chahiye` slowly, with the space | the box keeps the space; you get *Tu Chahiye* by Pritam at the top |
+| 8 | **Search recovers a bad query** | Search → type `tuchaiye` (no space) | rows appear with a green **"Showing results for “tu chahiye”"** pill and a *Search instead for "tuchaiye"* link |
+| 9 | **Search understands a typo** | Search → type `taylor swif` | the top rows are Taylor Swift's own recordings (Love Story, You Belong With Me …), with **"Showing results for “taylor swift”"** |
+| 10 | **Downloads report themselves** | play anything → the **↓** in the player bar | a toast counts up (a percentage, or the size if the length is unknown) and ends **Downloaded “… ” · N MB**; the ↓ turns into a tick |
+| 11 | Whole-health snapshot | Step 5 doctor | the block below |
 
 **If anything looks wrong, send me exactly this:**
 
@@ -231,30 +253,44 @@ were never un-quarantined) is auto-healed. If it still fails:
 2. Read the two log files above — the last lines name the cause.
 3. Re-run `First-Run-MacOS.command` (from the DMG), then Retry.
 4. Confirm the app is in `/Applications`, not still on the DMG.
-5. Still stuck? Send the doctor output plus those log tails.
+5. Still stuck? Send the doctor output plus those log tails.**"The Mac app feels slower than the phone"**
 
-**"The Mac app feels slower than the phone"**
+Part of this is by design and will always be true: the **phone talks to an
+always-running server** whose caches, provider probes and process caches are
+already warm, while **the Mac app boots its own private engine on every
+launch** — its own Bun + Next + POT provider + yt-dlp — and starts cold.
+Measured on the exact engine the app bundles: a warmed track resolves in
+**6–9 ms** versus **~22 s** cold.
 
-This is by design, and it is the difference the Mac shell will always have: the
-**phone talks to an always-running server** whose caches, provider probes and
-process caches are already warm, while **the Mac app boots its own private
-engine on every launch** — its own Bun + Next + POT provider + yt-dlp — and
-starts cold. Measured on the exact engine the app bundles: a warmed track
-resolves in **6–9 ms** versus **~22 s** cold.
+But part of it was a straight bug, and **0.4.3 fixes it**. The engine had no
+notion of *your* audio versus *background* work: the boot warm raced three
+recent tracks the moment the engine came up, and the client's "Deep Warm"
+re-raced the playing track *plus the next five* while you listened. Both
+deliberately bypassed the cache and the in-flight map, so tapping a track that
+was being warmed at that moment started a **second** full resolve and queued
+behind the first for the two yt-dlp process slots (each up to 25 s). That is
+exactly the shape of "it is slow at the start and sorts itself out later".
 
-What v0.4.1/v0.4.2 do about it:
+What 0.4.3 does about it:
 
-- The recursive `xattr -r` quarantine walk over the whole bundle no longer runs
-  on a clean install (it used to stat every file before the engine started).
-- On boot the engine warms the `yt-dlp` binary, the AI gateway config, the home
-  feed and the stream resolver for your most recent tracks — so your first tap
-  after launch is served from a warm cache.
+- Background resolves **join** a resolve already running for the same track
+  instead of starting a duplicate.
+- Warming **stands down while you are listening** — it refuses to start within
+  12 s of your last tap and stops mid-batch the moment you act.
+- The boot warm now waits out a 10 s grace period, then a real 8 s quiet
+  window, and races **one** track; if you are still listening it gives up
+  entirely rather than compete.
+- The client's Deep Warm no longer warms the track that is already playing (it
+  is resolved and on the wire — warming it bought nothing and cost a full
+  race), and covers the next four instead of six.
+- `/api/health` reports `streamActivity`, so you can see user resolves versus
+  warm stand-downs instead of taking any of this on faith.
 
 Tuning flags for the desktop shell:
 
 | Env var | Effect |
 | --- | --- |
-| `TSF_WARMUP_DEBUG=1` | log each warm-up step into `server.log` (four lines: `yt-dlp`, `ai-config`, `home-feed`, `recent-streams`) |
+| `TSF_WARMUP_DEBUG=1` | log each warm-up step into `server.log` (`yt-dlp`, `ai-config`, `home-feed`, `recent-streams`, and *"stood down — user is playing"*) |
 | `TSF_NO_WARMUP=1` | disable the whole boot warm-up |
 | `TSF_NO_STREAM_WARM=1` | disable only the recent-track stream warm |
 

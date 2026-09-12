@@ -24,6 +24,19 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.4.3',
+    title: 'Search that reads what you meant, and downloads you can watch',
+    date: '2026-09-12',
+    items: [
+      'The space bar works in search — "tu chahiye" is no longer typed as "tuchahiye" (the box used to eat the space mid-word)',
+      'Search understands you — a run-together or misspelled query is now searched as what you meant (tuchaiye → tu chahiye, taylor swif → taylor swift), labelled "Showing results for …" with one tap to search your literal words instead',
+      'The right song ranks first — queries that used to return a page of songs ABOUT an artist now return that artist\u2019s actual recordings',
+      'No more 5–10 s waits on the Mac — background warming no longer competes with the track you are waiting on, and the first tap after launch is no longer queued behind it',
+      'Downloads tell you what is happening — live percentage, real size and a clear Downloaded/Failed state everywhere you can start one (and the saved filename is no longer percent-mangled)',
+      'Paginated search results download as the real track instead of a synthesized placeholder',
+    ],
+  },
+  {
     version: '0.4.2',
     title: 'Honest diagnostics, instant first tap, real keyboard control',
     date: '2026-09-12',
