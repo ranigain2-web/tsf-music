@@ -40,8 +40,10 @@ import { useLibrary } from '@/store/library'
 import { useNav } from '@/store/nav'
 import { toast } from 'sonner'
 import { AddToPlaylistDialog } from '@/components/player/AddToPlaylistDialog'
-// MINDBEAT: taste-feedback + download signals from the track menu
-import { download, notForMe, surfaceForNavView } from '@/lib/mindbeat/client'
+// MINDBEAT: taste-feedback signals from the track menu
+import { notForMe, surfaceForNavView } from '@/lib/mindbeat/client'
+// downloads: ONE shared transfer per track, with live progress + toasts
+import { useDownloadState, startDownload } from '@/lib/download'
 import { fetchMindbeatRadio } from '@/lib/radio-v2'
 
 export function TrackContextMenu({
@@ -60,37 +62,13 @@ export function TrackContextMenu({
   const view = useNav((s) => s.view)
 
   const [addOpen, setAddOpen] = useState(false)
-  const [downloadState, setDownloadState] = useState<'idle' | 'loading' | 'done'>('idle')
   const [radioLoading, setRadioLoading] = useState(false)
   const liked = likes.has(track.videoId)
+  // Shared with every other surface — starting the download here lights up the
+  // row's own button and the player bar too (one transfer, one source of truth).
+  const download = useDownloadState(track.videoId)
 
-  const onDownload = async () => {
-    if (downloadState === 'loading') return
-    setDownloadState('loading')
-    try {
-      const r = await fetch(
-        `/api/download?id=${encodeURIComponent(track.videoId)}&title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artistName || '')}&dur=${track.duration || 0}`,
-      )
-      if (!r.ok) throw new Error('download failed')
-      const blob = await r.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${track.title} - ${track.artistName}.m4a`.replace(/[/\\:*?"<>|]/g, '_')
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      setDownloadState('done')
-      // MINDBEAT: TRACK_DOWNLOAD is strong positive evidence (2.5×)
-      try {
-        download(track.videoId)
-      } catch { /* instrumentation only */ }
-      setTimeout(() => setDownloadState('idle'), 2000)
-    } catch {
-      setDownloadState('idle')
-    }
-  }
+  const onDownload = () => void startDownload(track)
 
   const startRadio = async () => {
     if (radioLoading) return
@@ -219,17 +197,26 @@ export function TrackContextMenu({
 
           <ContextMenuItem
             onClick={onDownload}
-            disabled={downloadState !== 'idle'}
+            disabled={download.status === 'downloading'}
             className="gap-2.5 focus:bg-white/10"
+            data-testid="menu-download"
           >
-            {downloadState === 'loading' ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : downloadState === 'done' ? (
+            {download.status === 'downloading' ? (
+              <Loader2 size={14} className="animate-spin text-[#1ed760]" />
+            ) : download.status === 'done' ? (
               <Check size={14} className="text-[#1ed760]" />
             ) : (
-              <Download size={14} />
+              <Download size={14} className={download.status === 'error' ? 'text-red-500' : ''} />
             )}
-            Download file
+            {download.status === 'downloading'
+              ? download.progress === null
+                ? 'Downloading…'
+                : `Downloading… ${Math.round(download.progress * 100)}%`
+              : download.status === 'done'
+                ? 'Downloaded'
+                : download.status === 'error'
+                  ? 'Download failed — retry'
+                  : 'Download file'}
           </ContextMenuItem>
           <ContextMenuItem onClick={shareTrack} className="gap-2.5 focus:bg-white/10">
             <Share2 size={14} /> Share

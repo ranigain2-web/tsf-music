@@ -66,6 +66,11 @@ ios/App/output
 *.xcarchive
 # desktop shell — build outputs (sources are committed)
 .next-mac/
+# isolated production build dir (TSF_DIST_DIR=.next-prod) used to verify the
+# standalone engine without clobbering a running dev server's .next
+.next-prod/
+# browser-oracle screenshots (regenerate with scripts/e2e-browser)
+qa-shots*/
 src-tauri/target/
 src-tauri/resources/
 src-tauri/gen/schemas/

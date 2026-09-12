@@ -26,10 +26,12 @@ import {
   Loader2,
   Mic2,
   Download,
+  Check,
 } from 'lucide-react'
 import { usePlayer, fmtTime } from '@/store/player'
 import { seekTo } from '@/store/audio'
 import { useLibrary } from '@/store/library'
+import { useDownloadState, startDownload } from '@/lib/download'
 import { Slider } from '@/components/ui/slider'
 import SourceBadge from './SourceBadge'
 import { AlertTriangle } from 'lucide-react'
@@ -58,6 +60,8 @@ export function NowPlayingBar() {
 
   const likes = useLibrary((s) => s.likes)
   const toggleLike = useLibrary((s) => s.toggleLike)
+  // live download state for whatever is playing (null videoId ⇒ idle)
+  const barDownload = useDownloadState(track?.videoId)
   const openNowPlaying = usePlayer((s) => s.openNowPlaying)
   const toggleQueue = usePlayer((s) => s.toggleQueue)
   const toggleLyrics = usePlayer((s) => s.toggleLyrics)
@@ -326,27 +330,46 @@ export function NowPlayingBar() {
       {/* ---- right: volume / queue ---- */}
       <div className="hidden lg:flex items-center justify-end gap-2">
         <button
-          onClick={async () => {
-            if (!track) return
-            try {
-              const r = await fetch(`/api/download?id=${encodeURIComponent(track.videoId)}&title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artistName || '')}&dur=${track.duration || 0}`)
-              if (!r.ok) throw new Error('download failed')
-              const blob = await r.blob()
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = `${track.title} - ${track.artistName}.m4a`.replace(/[/\\:*?"<>|]/g, '_')
-              document.body.appendChild(a)
-              a.click()
-              document.body.removeChild(a)
-              URL.revokeObjectURL(url)
-            } catch {}
+          onClick={() => {
+            if (track) void startDownload(track)
           }}
-          className="text-[#b3b3b3] hover:text-white transition-colors p-1 hover:scale-110"
-          aria-label="Download this track"
-          title="Download"
+          disabled={barDownload.status === 'downloading'}
+          data-testid="np-download"
+          className={`transition-colors p-1 hover:scale-110 ${
+            barDownload.status === 'downloading'
+              ? 'text-[#1ed760]'
+              : barDownload.status === 'done'
+                ? 'text-[#1ed760]'
+                : barDownload.status === 'error'
+                  ? 'text-red-500'
+                  : 'text-[#b3b3b3] hover:text-white'
+          }`}
+          aria-label={
+            barDownload.status === 'downloading'
+              ? `Downloading${barDownload.progress === null ? '' : ` ${Math.round(barDownload.progress * 100)} percent`}`
+              : barDownload.status === 'done'
+                ? 'Downloaded'
+                : 'Download this track'
+          }
+          title={
+            barDownload.status === 'downloading'
+              ? barDownload.progress === null
+                ? 'Downloading…'
+                : `Downloading… ${Math.round(barDownload.progress * 100)}%`
+              : barDownload.status === 'done'
+                ? 'Downloaded'
+                : barDownload.status === 'error'
+                  ? 'Download failed — click to retry'
+                  : 'Download'
+          }
         >
-          <Download size={16} />
+          {barDownload.status === 'downloading' ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : barDownload.status === 'done' ? (
+            <Check size={16} />
+          ) : (
+            <Download size={16} />
+          )}
         </button>
         <button
           onClick={toggleLyrics}

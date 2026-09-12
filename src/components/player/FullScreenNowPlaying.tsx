@@ -50,6 +50,7 @@ import { SyncedLyrics } from './SyncedLyrics'
 import { QueuePanel } from './QueuePanel'
 import { useWakeLock } from '@/hooks/useWakeLock'
 import { fetchMindbeatRadio } from '@/lib/radio-v2'
+import { useDownloadState, startDownload } from '@/lib/download'
 import SourceBadge from './SourceBadge'
 
 export function FullScreenNowPlaying() {
@@ -57,6 +58,8 @@ export function FullScreenNowPlaying() {
   const queue = usePlayer((s) => s.queue)
   const queueIndex = usePlayer((s) => s.queueIndex)
   const track: PlayerTrack | null = queue[queueIndex] ?? null
+  // live download state for the open track (the "Save" pill narrates it)
+  const fsDownload = useDownloadState(track?.videoId)
   // Swipe-down dismiss controls (armed from the top bar only)
   const dragControls = useDragControls()
 
@@ -510,27 +513,53 @@ export function FullScreenNowPlaying() {
               <ListMusic size={14} /> Queue
             </button>
             <button
-              onClick={async () => {
-                if (!track) return
-                try {
-                  const r = await fetch(`/api/download?id=${encodeURIComponent(track.videoId)}&title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artistName || '')}&dur=${track.duration || 0}`)
-                  if (!r.ok) throw new Error('download failed')
-                  const blob = await r.blob()
-                  const url = URL.createObjectURL(blob)
-                  const a = document.createElement('a')
-                  a.href = url
-                  a.download = `${track.title} - ${track.artistName}.m4a`.replace(/[/\\:*?"<>|]/g, '_')
-                  document.body.appendChild(a)
-                  a.click()
-                  document.body.removeChild(a)
-                  URL.revokeObjectURL(url)
-                } catch {}
+              onClick={() => {
+                if (track) void startDownload(track)
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors border border-white/30 text-white/80 hover:border-white"
-              aria-label="Download"
-              title="Download this track"
+              disabled={fsDownload.status === 'downloading'}
+              data-testid="fs-download"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors border ${
+                fsDownload.status === 'downloading' || fsDownload.status === 'done'
+                  ? 'border-[#1ed760] text-[#1ed760]'
+                  : fsDownload.status === 'error'
+                    ? 'border-red-500/60 text-red-400'
+                    : 'border-white/30 text-white/80 hover:border-white'
+              }`}
+              aria-label={
+                fsDownload.status === 'downloading'
+                  ? `Downloading${fsDownload.progress === null ? '' : ` ${Math.round(fsDownload.progress * 100)} percent`}`
+                  : fsDownload.status === 'done'
+                    ? 'Downloaded'
+                    : 'Download this track'
+              }
+              title={
+                fsDownload.status === 'downloading'
+                  ? fsDownload.progress === null
+                    ? 'Downloading…'
+                    : `Downloading… ${Math.round(fsDownload.progress * 100)}%`
+                  : fsDownload.status === 'done'
+                    ? 'Downloaded'
+                    : fsDownload.status === 'error'
+                      ? 'Download failed — click to retry'
+                      : 'Save a copy of this track'
+              }
             >
-              <Download size={14} /> Save
+              {fsDownload.status === 'downloading' ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : fsDownload.status === 'done' ? (
+                <Check size={14} />
+              ) : (
+                <Download size={14} />
+              )}
+              {fsDownload.status === 'downloading'
+                ? fsDownload.progress === null
+                  ? 'Saving…'
+                  : `Saving ${Math.round(fsDownload.progress * 100)}%`
+                : fsDownload.status === 'done'
+                  ? 'Saved'
+                  : fsDownload.status === 'error'
+                    ? 'Retry'
+                    : 'Save'}
             </button>
             <button
               onClick={() => {

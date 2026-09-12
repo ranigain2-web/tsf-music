@@ -18,6 +18,7 @@ import { planSearch, correctedQuery, registerArtistLexicon, registerVibeVocab, r
 import { clusterVersions, mergePools, type Candidate } from '../src/lib/search-v2/verify'
 import { rankRows, REASON_LINES, withReasonLines } from '../src/lib/search-v2/rank'
 import { titleAuthorityMissing } from '../src/lib/search-v2/rescue'
+import { splitGluedToken, similarity, recognizeQuery, registerSegmentNames } from '../src/lib/search-v2/recognize'
 
 let pass = 0
 let fail = 0
@@ -148,6 +149,73 @@ try {
   }
 } catch {
   console.log('SKIP  route ping (unreachable — sandbox network)')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// QUERY RECOGNITION (S0+) — the "tuchaiye → tu chahiye" layer.
+// Locally deterministic (provider disabled), so it is a real oracle.
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n— query recognition (glue split / ortho / spelling) —')
+
+{
+  // names are split targets too — same registration initSearchEngine does
+  registerSegmentNames([...SEED_ARTISTS, 'Kesariya', 'Tum Hi Ho'])
+
+  const splits: Array<[string, string[] | null]> = [
+    ['tuchaiye', ['tu', 'chaiye']],
+    ['tuchahiye', ['tu', 'chahiye']],
+    ['tumhiho', ['tum', 'hi', 'ho']],
+    ['arjitsingh', ['arjit', 'singh']],
+    ['mujhekya', ['mujhe', 'kya']],
+    // a real word must never be chopped into fragments
+    ['night', null],
+    ['kesariya', null],
+    ['love', null],
+  ]
+  for (const [tok, want] of splits) {
+    const got = splitGluedToken(tok)
+    check(`recognize: split ${tok}`, JSON.stringify(got) === JSON.stringify(want), `got=${JSON.stringify(got)}`)
+  }
+
+  check('recognize: similarity is exact on equal text', similarity('tu chahiye', 'Tu Chahiye') === 1)
+  check(
+    'recognize: glued form is close to the real title',
+    similarity('tuchaiye', 'Tu Chahiye') > 0.55,
+    String(similarity('tuchaiye', 'Tu Chahiye').toFixed(3)),
+  )
+  check(
+    'recognize: unrelated titles stay apart',
+    similarity('tuchaiye', 'Bohemian Rhapsody') < 0.4,
+    String(similarity('tuchaiye', 'Bohemian Rhapsody').toFixed(3)),
+  )
+
+  const cases: Array<[string, string | null, string | null]> = [
+    ['tuchaiye', 'tu chahiye', 'split'],
+    ['tuchahiye', 'tu chahiye', 'split'],
+    ['tumhiho', 'tum hi ho', 'split'],
+    // already-resolving queries must be returned UNTOUCHED — this is the
+    // guarantee that recognition can never degrade a good search
+    ['tu chahiye', null, null],
+    ['tum hi ho', null, null],
+    ['kesariya', null, null],
+    ['night drive', null, null],
+    ['arijit singh', null, null],
+  ]
+  for (const [q, wantShowing, wantVia] of cases) {
+    const rec = await recognizeQuery(q, { allowProvider: false })
+    check(
+      `recognize: ${JSON.stringify(q)} → ${JSON.stringify(wantShowing)}`,
+      rec.showingFor === wantShowing && rec.via === wantVia,
+      `showingFor=${JSON.stringify(rec.showingFor)} via=${rec.via} confident=${rec.confident}`,
+    )
+  }
+
+  // the glued query must carry a probe that a real title can match against
+  const glued = await recognizeQuery('tuchaiye', { allowProvider: false })
+  check('recognize: glued query yields a probe candidate', glued.candidates.includes('tu chahiye'), JSON.stringify(glued.candidates))
+  check('recognize: glued query is flagged confident', glued.confident === true)
+  const clean = await recognizeQuery('tum hi ho', { allowProvider: false })
+  check('recognize: clean query offers no correction', clean.showingFor === null && clean.candidates.length === 0)
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)

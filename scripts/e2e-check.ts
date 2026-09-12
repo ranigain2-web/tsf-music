@@ -306,6 +306,32 @@ try {
   const cd = dl.headers.get('content-disposition') || ''
   check('download serves audio', dl.status === 200, `status=${dl.status}`)
   check('download sets an attachment filename', cd.toLowerCase().includes('attachment') && cd.length > 10, `cd=${cd.slice(0, 80)}`)
+  // RFC 5987: a quoted-ASCII fallback AND the UTF-8 filename* form. The old
+  // single encodeURIComponent-in-quotes form put "A%20B.m4a" on disk.
+  check(
+    'download filename is not percent-mangled',
+    /filename="[^"%]*"/.test(cd) && /filename\*=UTF-8''/.test(cd),
+    `cd=${cd.slice(0, 120)}`,
+  )
+  // Real progress is only possible when the length is known up front — the
+  // route must stream the upstream through instead of buffering it whole.
+  const len = Number(dl.headers.get('content-length') || 0)
+  check('download declares its length up front (live progress)', len > 0, `content-length=${len}`)
+
+  // `saavn-<id>` is NOT a YouTube id, so the download route must resolve it
+  // through the JioSaavn catalog — otherwise every paginated search row would
+  // download as a fabricated synth track.
+  const saavnDl = await req(
+    `/api/download?id=saavn-rZL_z-Yh&title=Tu%20Chahiye&artist=A.R.%20Dixit&dur=168`,
+    { method: 'HEAD' },
+    90_000,
+  )
+  const saavnProvider = saavnDl.headers.get('x-stream-provider') || ''
+  check(
+    'saavn-<id> downloads the real catalog track (not the synth)',
+    saavnDl.status === 200 && saavnProvider.includes('jiosaavn'),
+    `status=${saavnDl.status} provider=${saavnProvider}`,
+  )
 
   const sb = await req(`/api/sponsorblock?id=${YT_ID}`)
   check('sponsorblock returns a segment array', sb.status === 200 && Array.isArray(sb.json?.segments), `status=${sb.status}`)

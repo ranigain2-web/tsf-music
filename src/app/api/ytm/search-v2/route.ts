@@ -51,6 +51,14 @@ function serializeResult(result: SearchV2Result): Ndjson {
     },
     topReason: result.topReason,
     corrected: result.corrected,
+    // QUERY RECOGNITION: the query the engine actually searched when the
+    // literal one could not be honoured, plus the mechanism that produced it
+    // (the UI must say "Showing results for …" rather than pretend the user
+    // typed it).
+    showingFor: result.showingFor,
+    originalQuery: result.originalQuery,
+    recognitionVia: result.recognitionVia,
+    didYouMean: result.didYouMean,
     relaxedFrom: result.relaxedFrom,
     relaxedQuery: result.relaxedQuery,
     latencyMs: result.latencyMs,

@@ -55,6 +55,8 @@ export async function ensureShots() {
 export async function mkPage(browser, opts = {}) {
   const ctx = await browser.newContext({
     viewport: opts.viewport || { width: 1440, height: 900 },
+    // the download suite asserts what Chromium actually saves to disk
+    acceptDownloads: true,
     ...(opts.ctx || {}),
   })
   const page = await ctx.newPage()

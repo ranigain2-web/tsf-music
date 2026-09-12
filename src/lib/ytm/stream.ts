@@ -108,6 +108,79 @@ const INVIDIOUS_INSTANCES = [
   'https://yewtu.be',
 ]
 
+// ---------- foreground priority ----------
+
+/**
+ * WHY THIS EXISTS ("the Mac takes 5-10 s per song, my phone is instant"):
+ *
+ * Background work and the audio the user is WAITING ON used to be
+ * indistinguishable to this module. Three warmers all call resolveStream with
+ * `skipCache: true` — the boot warm (3 tracks), the client's Deep Warm (the
+ * current + next 5) and the idle upgrade loop — and every one of those calls
+ * spawns its own yt-dlp subprocess (≤2 at a time, ≤25 s each) and bypasses the
+ * in-flight map, so a user tap on a track that was *being warmed right now*
+ * started a SECOND full provider race and queued behind the first.
+ *
+ * On a warm always-on server (the phone's setup) the caches absorb this. On a
+ * cold desktop launch it lands exactly on the first taps — which is why the
+ * Mac felt slow at startup and then "sorted itself out after a while".
+ *
+ * So: foreground resolves are stamped here, background work joins foreground
+ * work instead of duplicating it, and the warmers stand down while the user is
+ * waiting. Background work is genuinely useful (it upgrades previews to
+ * full-length) — it just must never be the reason a tap is slow.
+ */
+interface StreamActivity {
+  /** ms epoch of the last USER-initiated resolve (0 = none this process) */
+  lastUserResolveAt: number
+  /** count of user resolves — cheap breadcrumb for the health payload */
+  userResolves: number
+  /** count of background resolves that stood down because a user was active */
+  preempted: number
+}
+
+function activity(): StreamActivity {
+  const g = globalThis as unknown as { __tsfStreamActivity?: StreamActivity }
+  g.__tsfStreamActivity ??= { lastUserResolveAt: 0, userResolves: 0, preempted: 0 }
+  return g.__tsfStreamActivity
+}
+
+/** Mark that a user-facing resolve just started (foreground lane). */
+export function noteUserResolve(): void {
+  const a = activity()
+  a.lastUserResolveAt = Date.now()
+  a.userResolves += 1
+}
+
+/** Has a user-facing resolve started within the last `quietMs`? */
+export function userActiveWithin(quietMs: number): boolean {
+  const { lastUserResolveAt } = activity()
+  return lastUserResolveAt > 0 && Date.now() - lastUserResolveAt < quietMs
+}
+
+/** Read-only snapshot for /api/health (honest: real counters, no estimates). */
+export function streamActivitySnapshot(): { lastUserResolveAt: number; userResolves: number; preempted: number } {
+  const { lastUserResolveAt, userResolves, preempted } = activity()
+  return { lastUserResolveAt, userResolves, preempted }
+}
+
+/**
+ * Wait for a quiet window, bounded. Returns true when it is safe to start
+ * background work, false when the user is still active at the deadline.
+ */
+export async function waitForQuiet(
+  quietMs: number,
+  maxWaitMs: number,
+  stepMs = 1500,
+): Promise<boolean> {
+  const deadline = Date.now() + maxWaitMs
+  for (;;) {
+    if (!userActiveWithin(quietMs)) return true
+    if (Date.now() >= deadline) return false
+    await new Promise((r) => setTimeout(r, stepMs))
+  }
+}
+
 // ---------- health tracking ----------
 
 async function reportHealth(provider: string, ok: boolean, latencyMs: number, error?: string) {
@@ -364,27 +437,63 @@ export interface WarmOutcome {
   upgraded: boolean
 }
 
+/**
+ * How long the user must be quiet before background warming may use the
+ * providers. 12 s is deliberately generous: a play is followed by preflight +
+ * prefetch + the next few handoffs, and any of those is foreground work.
+ */
+const WARM_QUIET_MS = 12_000
+/** Hard ceiling on one warm batch, so a single batch cannot monopolise the
+ *  providers for minutes on a slow network. */
+const WARM_BATCH_BUDGET_MS = 60_000
+
+/**
+ * Warm a batch of tracks. YIELDS to foreground playback at every step:
+ *   - the batch refuses to start while a user resolve happened recently;
+ *   - it re-checks between items and stops the moment the user acts;
+ *   - its own resolves are flagged `background`, so they JOIN a user resolve
+ *     already in flight for the same id instead of starting a duplicate race;
+ *   - it stops after a fixed budget.
+ * A paused batch is not a failure — the client re-offers the same ids on the
+ * next stable playback window.
+ */
 export async function warmStreams(
   rawIds: string[],
   meta: Record<string, { title?: string; artist?: string; durationSec?: number }> = {},
-): Promise<{ warmed: WarmOutcome[]; skipped: number }> {
+  opts: { quietMs?: number } = {},
+): Promise<{ warmed: WarmOutcome[]; skipped: number; paused: boolean }> {
+  const quietMs = opts.quietMs ?? WARM_QUIET_MS
   const ids = [...new Set(rawIds)]
     .filter((id) => VIDEO_ID_RE.test(id))
     .filter((id) => !warmInFlight.has(id))
-    .slice(0, 8)
+    .slice(0, 4)
 
   // Global throttle: at most one batch per gap (client retries are cheap no-ops)
   const now = Date.now()
-  if (ids.length === 0) return { warmed: [], skipped: rawIds.length }
+  if (ids.length === 0) return { warmed: [], skipped: rawIds.length, paused: false }
   if (now - lastWarmBatchAt < WARM_BATCH_MIN_GAP_MS) {
-    return { warmed: [], skipped: rawIds.length }
+    return { warmed: [], skipped: rawIds.length, paused: false }
+  }
+  // Never START a batch while the user is waiting on audio.
+  if (userActiveWithin(quietMs)) {
+    activity().preempted += 1
+    return { warmed: [], skipped: rawIds.length, paused: true }
   }
   lastWarmBatchAt = now
 
   const warmed: WarmOutcome[] = []
   let skipped = 0
+  let paused = false
+  const deadline = Date.now() + WARM_BATCH_BUDGET_MS
 
   for (const id of ids) {
+    // Re-check between items: a tap during item N must stop item N+1, not sit
+    // behind it in the provider queue.
+    if (userActiveWithin(quietMs) || Date.now() >= deadline) {
+      paused = true
+      activity().preempted += 1
+      break
+    }
     warmInFlight.add(id)
     try {
       // What does the cache hold right now? Fresh full-length rows need no work.
@@ -404,6 +513,7 @@ export async function warmStreams(
         title: meta[id]?.title,
         artist: meta[id]?.artist,
         durationSec: meta[id]?.durationSec || 0,
+        background: true,
       })
       const full = FULL_LENGTH_PROVIDERS_RE.test(result.provider)
       warmed.push({ id, provider: result.provider, full, upgraded: full && before !== result.provider })
@@ -413,7 +523,7 @@ export async function warmStreams(
       warmInFlight.delete(id)
     }
   }
-  return { warmed, skipped }
+  return { warmed, skipped, paused }
 }
 
 // ---------- expiry ----------
@@ -651,8 +761,17 @@ function inflightMap(): Map<string, Promise<StreamResult>> {
 
 export async function resolveStream(
   videoId: string,
-  opts: { skipCache?: boolean; durationSec?: number; title?: string; artist?: string } = {}
+  opts: {
+    skipCache?: boolean
+    durationSec?: number
+    title?: string
+    artist?: string
+    /** background work (warmers): yields to the user and never duplicates a
+     *  resolve that is already in flight for this id. */
+    background?: boolean
+  } = {}
 ): Promise<StreamResult> {
+  if (!opts.background) noteUserResolve()
   if (!VIDEO_ID_RE.test(videoId)) {
     // Malformed id — synth guard (the route also 400s these).
     return {
@@ -665,9 +784,14 @@ export async function resolveStream(
   }
 
   // Join an identical in-flight resolve (burst of HEAD preflight + GET).
+  //
+  // FOREGROUND PRIORITY: a background resolve ALWAYS joins whatever is already
+  // running for this id — it must never start a second race that competes with
+  // the user for the yt-dlp slots. (A foreground resolve still honours
+  // `fresh=1`/skipCache, which exists precisely to bypass the cache.)
   const map = inflightMap()
   const existing = map.get(videoId)
-  if (existing && !opts.skipCache) return existing
+  if (existing && (opts.background || !opts.skipCache)) return existing
 
   const t0 = Date.now()
   const run = doResolve(videoId, opts)
@@ -678,7 +802,13 @@ export async function resolveStream(
 
   async function doResolve(
     videoId: string,
-    opts: { skipCache?: boolean; durationSec?: number; title?: string; artist?: string },
+    opts: {
+      skipCache?: boolean
+      durationSec?: number
+      title?: string
+      artist?: string
+      background?: boolean
+    },
   ): Promise<StreamResult> {
     const { skipCache, durationSec = 0, title, artist } = opts
     const record = (r: StreamResult) => {

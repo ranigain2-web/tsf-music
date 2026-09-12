@@ -361,7 +361,13 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
     if (v2.phase !== 'ready' || v2.final.rows?.length) return []
     const q = debounced.toLowerCase()
     const out: string[] = []
-    if (v2.final.corrected && v2.final.corrected.toLowerCase() !== q) out.push(v2.final.corrected)
+    // the recognized reading first — it is the one the engine itself would
+    // search (":tuchaiye" → "tu chahiye"), then the engine's own corrections
+    const strong = v2.final.showingFor ?? v2.final.didYouMean
+    if (strong && strong.toLowerCase() !== q) out.push(strong)
+    if (v2.final.corrected && v2.final.corrected.toLowerCase() !== q && !out.includes(v2.final.corrected)) {
+      out.push(v2.final.corrected)
+    }
     for (const v of v2.final.plan?.variants ?? []) {
       if (v.toLowerCase() !== q && !out.includes(v)) out.push(v)
     }
@@ -749,11 +755,51 @@ export function SearchView({ initialQuery }: { initialQuery?: string }) {
                 <>
                   {/* recovery banners — correction pair, relaxation, rescue, lyric, partial */}
                   {(corrected && corrected.toLowerCase() !== debounced.toLowerCase()) ||
+                  (v2.phase === 'ready' && v2.final.showingFor) ||
+                  (v2.phase === 'ready' && v2.final.didYouMean) ||
                   (v2.phase === 'ready' && v2.final.relaxedQuery) ||
                   (v2.phase === 'ready' && v2.final.plan?.kind === 'lyric_fragment') ||
                   (v2.phase === 'ready' && v2.final.rescueRung) ||
                   (v2.phase === 'ready' && sigState === 'partial') ? (
                     <div className="space-y-2 mb-4" data-testid="search-banners">
+                      {/* QUERY RECOGNITION — the engine searched a reading of the
+                          query it had to recognize (missing space, dropped
+                          letter). Say so, and offer the literal query back. */}
+                      {v2.phase === 'ready' && v2.final.showingFor && (
+                        <div
+                          className="flex items-center gap-2 flex-wrap text-[13px]"
+                          data-testid="search-recognized"
+                        >
+                          <span className="text-[#a7a7a7]">Showing results for</span>
+                          <span className="rounded-full bg-[#1ed760]/15 border border-[#1ed760]/40 px-3 h-8 flex items-center font-bold text-[#1ed760]">
+                            &ldquo;{v2.final.showingFor}&rdquo;
+                          </span>
+                          {(v2.final.originalQuery ?? '').toLowerCase() !== v2.final.showingFor.toLowerCase() && (
+                            <>
+                              <span className="text-[#a7a7a7]">·</span>
+                              <button
+                                onClick={() => runQuery(v2.final.originalQuery ?? debounced)}
+                                className="text-[#a7a7a7] hover:text-white underline underline-offset-2 transition-colors"
+                              >
+                                Search instead for &ldquo;{v2.final.originalQuery ?? debounced}&rdquo;
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {/* results were kept, but a different reading exists */}
+                      {v2.phase === 'ready' && v2.final.didYouMean && (
+                        <div className="text-[13px] text-[#a7a7a7]" data-testid="search-did-you-mean">
+                          Did you mean{' '}
+                          <button
+                            onClick={() => runQuery(v2.final.didYouMean as string)}
+                            className="text-[#1ed760] hover:underline font-medium"
+                          >
+                            {v2.final.didYouMean}
+                          </button>
+                          ?
+                        </div>
+                      )}
                       {corrected && corrected.toLowerCase() !== debounced.toLowerCase() && (
                         <div
                           className="flex items-center gap-2 flex-wrap text-[13px]"

@@ -31,7 +31,22 @@ interface CacheEntry {
   at: number;
   rows: SearchRow[];
   /** SIG declaration stored with the final ranked list (§3.1) */
-  sig?: { sigState?: string; partialArtists?: string[] };
+  sig?: CacheSig;
+}
+
+/**
+ * The declaration that must survive a cache hit verbatim: the SIG state and
+ * its disambiguation chips, plus the query-recognition provenance. A cached
+ * answer that "forgot" it was served via "Showing results for tu chahiye"
+ * would be a lie on the second search — the label is part of the result.
+ */
+export interface CacheSig {
+  sigState?: string;
+  partialArtists?: string[];
+  showingFor?: string;
+  originalQuery?: string;
+  recognitionVia?: string;
+  didYouMean?: string;
 }
 
 const cache = new Map<string, CacheEntry>();
@@ -96,7 +111,7 @@ export interface RetrievalResult {
   pools: Array<{ pool: string; rows: SearchRow[] }>;
   cacheHit: boolean;
   probes: string[];
-  sig?: { sigState?: string; partialArtists?: string[] };
+  sig?: CacheSig;
 }
 
 /** In-flight dedupe wrapper (exact palette-engine pattern). */
@@ -192,7 +207,7 @@ export async function retrieve(
 export function rememberResults(
   plan: SearchPlan,
   rows: SearchRow[],
-  sig?: { sigState?: string; partialArtists?: string[] },
+  sig?: CacheSig,
 ): void {
   if (rows.length > 0) {
     cacheSet(plan.cacheKey, rows.slice(0, 30), sig);

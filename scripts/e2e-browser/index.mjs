@@ -335,8 +335,119 @@ await withStep('10. Mobile 390x844 (touch)', async () => {
   await ctx.close()
 })
 
-// ------------------------------------------------------------ 11. cleanup
-await withStep('11. Harness self-cleanup', async () => {
+// -------------------------------------- 11. Wave-18 regression fixes
+await withStep('11. Wave-18 regressions (space · query recognition · download)', async () => {
+  const { ctx, page } = await mkPage(browser)
+  await boot(page)
+  await click(page, 'button[aria-label="Search"]')
+  await page.waitForTimeout(1500)
+  const input = page.locator('input[aria-label="Search"]:visible').first()
+
+  // ---- (a) the space bug -------------------------------------------------
+  // Typed at a human cadence on purpose: the defect only appeared when the
+  // live-replace debounce (250 ms) landed BETWEEN two keystrokes, at which
+  // point the input was rewritten from the trimmed nav state and the space
+  // vanished ("tu chahiye" became "tuc...").
+  await input.click()
+  await input.fill('')
+  await page.keyboard.type('tu chahiye', { delay: 140 })
+  await page.waitForTimeout(700)
+  const typed = await input.inputValue()
+  check('desktop search box keeps the space while typing', typed.includes(' '), `value = "${typed}"`)
+  check('the typed query survives intact', typed.trim() === 'tu chahiye', `value = "${typed}"`)
+
+  const playLabels = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('button[aria-label^="Play "]')]
+        .slice(0, 6)
+        .map((b) => (b.getAttribute('aria-label') || '').replace(/^Play /, '')),
+    )
+  // ---- (b) a glued query must still resolve ------------------------------
+  await input.fill('')
+  await page.waitForTimeout(400)
+  await page.keyboard.type('tuchaiye', { delay: 40 })
+  await page.waitForTimeout(14_000)
+  const rows1 = await page.locator('button[aria-label^="Play "]').count()
+  const recog = page.locator('[data-testid="search-recognized"]')
+  const recogText = (await recog.count()) ? (await recog.first().innerText()).replace(/\s+/g, ' ') : ''
+  const top1 = await playLabels()
+  check('glued query "tuchaiye" returns rows', rows1 >= 6, `${rows1} play buttons`)
+  check('it is labelled "Showing results for tu chahiye"', /showing results for/i.test(recogText) && /tu chahiye/i.test(recogText), `banner = "${recogText}"`)
+  check('the canonical recording is now the top row', top1[0] === 'Tu Chahiye', JSON.stringify(top1.slice(0, 3)))
+  await page.screenshot({ path: `${SHOTS}/e2e-11a-recognized.png` })
+
+  // ---- (c) "a page of songs ABOUT the artist" (taylor swif) --------------
+  await input.fill('')
+  await page.waitForTimeout(400)
+  await page.keyboard.type('taylor swif', { delay: 30 })
+  await page.waitForTimeout(16_000)
+  const recog2 = page.locator('[data-testid="search-recognized"]')
+  const recog2Text = (await recog2.count()) ? (await recog2.first().innerText()).replace(/\s+/g, ' ') : ''
+  const top2 = await playLabels()
+  // count the rows whose ARTIST cell is the queried artist — scoped to <main>
+  // so the sidebar's own labels cannot masquerade as results
+  const artistHits2 = await page.evaluate(() => {
+    const root = document.querySelector('main') || document.body
+    // the artist cell is a LEAF node holding exactly the artist name (it is a
+    // button when we know the artist id, plain text when we do not)
+    return [...root.querySelectorAll('div,span,button,a')].filter(
+      (e) => e.children.length === 0 && (e.textContent || '').trim() === 'Taylor Swift',
+    ).length
+  })
+  check('misspelled query is searched as "taylor swift"', /showing results for/i.test(recog2Text) && /taylor swift/i.test(recog2Text), `banner = "${recog2Text}"`)
+  check('the top rows are performed BY Taylor Swift, not merely about her', artistHits2 >= 2, `${artistHits2} result rows credited to Taylor Swift · titles ${JSON.stringify(top2.slice(0, 4))}`)
+  check('the "songs about Taylor Swift" junk is gone from the top', !/Masala|Not a Taylor Swift Song|For Taylor Swift/i.test(JSON.stringify(top2)), JSON.stringify(top2.slice(0, 4)))
+  await page.screenshot({ path: `${SHOTS}/e2e-11b-misspelled.png` })
+
+  // ---- (d) download feedback --------------------------------------------
+  await click(page, 'button[aria-label^="Play "]')
+  const pb = await waitForPlayback(page, 60_000)
+  check('playback started for the download check', pb.ok, `t=${(pb.t || 0).toFixed(2)}s in ${pb.ms}ms`)
+  const dl = page.locator('[data-testid="np-download"]')
+  check('the player bar exposes a download control', (await dl.count()) > 0)
+  if (await dl.count()) {
+    // what Chromium actually writes to disk — the end of the chain:
+    // client state → /api/download → Content-Disposition → saved file name
+    const saved = []
+    page.on('download', (d) => saved.push(d.suggestedFilename()))
+
+    await dl.first().click()
+    const toastText = () => page.evaluate(() => document.querySelector('[data-sonner-toaster]')?.textContent || '')
+    const busyBtns = () => page.locator('button[aria-label^="Downloading"]').count()
+    const stateChips = () => page.locator('[data-testid="download-state"]').count()
+
+    // Poll FAST and for EITHER end of the transfer. The "downloading" window
+    // is real but short on a good connection (a 1 MB preview lands in well
+    // under a second), so a slow poll that waits for "Downloading" to appear
+    // can miss it entirely and then wait forever for it to come back.
+    let sawDownloading = false
+    let sawPercent = false
+    let done = null
+    let failed = null
+    const t0 = Date.now()
+    while (Date.now() - t0 < 150_000) {
+      const [busy, chips, txt] = await Promise.all([busyBtns(), stateChips(), toastText()])
+      if (!sawDownloading && (busy > 0 || chips > 0 || /Downloading/.test(txt))) {
+        sawDownloading = true
+        if (/\d+\s*(%|B|KB|MB)/.test(txt) || chips > 0) sawPercent = true
+        await page.screenshot({ path: `${SHOTS}/e2e-11c-downloading.png` })
+      }
+      const m = txt.match(/Downloaded[^\d]*(\d+(?:\.\d+)?\s*(?:B|KB|MB))/i)
+      if (m) { done = m[1]; break }
+      const f = txt.match(/Download failed[^|]{0,80}/i)
+      if (f) { failed = f[0]; break }
+      await page.waitForTimeout(120)
+    }
+    check('download reports completion with its real size', !!done, done ? `toast said ${done}` : failed ? `failed: ${failed}` : 'no completion within 150 s')
+    check('a "downloading" state was shown while it ran', sawDownloading, sawDownloading ? (sawPercent ? 'live progress rendered' : 'state rendered') : 'never observed')
+    check('Chromium saved the file under a clean, un-mangled name', saved.some((f) => /^[^%]*\.(m4a|mp3|wav)$/i.test(f)), JSON.stringify(saved))
+    await page.screenshot({ path: `${SHOTS}/e2e-11d-downloaded.png` })
+  }
+  await ctx.close()
+})
+
+// ------------------------------------------------------------ 12. cleanup
+await withStep('12. Harness self-cleanup', async () => {
   const list = await (await fetch(`${BASE}/api/library/playlists`)).json()
   const junk = (list.playlists || []).filter((p) => /^E2E /.test(p.name))
   check('harness created probe playlists', junk.length >= 2, `${junk.length} to clean`)
@@ -351,8 +462,8 @@ await withStep('11. Harness self-cleanup', async () => {
   check('harness leaves no residue behind', left.length === 0, `${left.length} left`)
 })
 
-// ----------------------------------------------------- 12. honesty gate
-await withStep('12. Runtime honesty gate', async () => {
+// ----------------------------------------------------- 13. honesty gate
+await withStep('13. Runtime honesty gate', async () => {
   const real = consoleErrors.filter((e) => !/favicon|React DevTools|hydrat|Download the React/i.test(e))
   check('no uncaught page errors', pageErrors.length === 0, pageErrors.slice(0, 3).join(' || '))
   check('no unexpected console errors', real.length === 0, real.slice(0, 4).join(' || '))
@@ -361,3 +472,4 @@ await withStep('12. Runtime honesty gate', async () => {
 await browser.close()
 const failed = summarize()
 process.exit(failed.length ? 1 : 0)
+

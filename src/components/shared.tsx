@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 import { Artwork } from '@/components/Artwork'
 import { AddToPlaylistDialog } from '@/components/player/AddToPlaylistDialog'
 import { TrackContextMenu } from '@/components/player/TrackContextMenu'
+import { useDownloadState, startDownload } from '@/lib/download'
 export { AddToPlaylistDialog }
 
 /**
@@ -57,7 +58,9 @@ export function TrackRow({
 
   const isCurrent = current?.videoId === track.videoId
   const liked = likes.has(track.videoId)
-  const [downloadState, setDownloadState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
+  // Live download progress, shared with every other surface that can start
+  // the same download (context menu, player bar) — one transfer, many views.
+  const download = useDownloadState(track.videoId)
 
   // Adaptive grid template — must ALWAYS match the number of rendered grid
   // children, otherwise the title cluster lands in the 16px index column and
@@ -78,28 +81,7 @@ export function TrackRow({
     return `${m}:${String(sec).padStart(2, '0')}`
   }
 
-  const onDownload = async () => {
-    if (downloadState === 'loading') return
-    setDownloadState('loading')
-    try {
-      const r = await fetch(`/api/download?id=${encodeURIComponent(track.videoId)}&title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artistName || '')}&dur=${track.duration || 0}`)
-      if (!r.ok) throw new Error('download failed')
-      const blob = await r.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${track.title} - ${track.artistName}.m4a`.replace(/[/\\:*?"<>|]/g, '_')
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      setDownloadState('done')
-      setTimeout(() => setDownloadState('idle'), 2000)
-    } catch {
-      setDownloadState('error')
-      setTimeout(() => setDownloadState('idle'), 2500)
-    }
-  }
+  const onDownload = () => void startDownload(track)
 
   return (
     <>
@@ -205,18 +187,54 @@ export function TrackRow({
           >
             <Plus size={16} />
           </button>
+          {/* The download affordance PINS ITSELF VISIBLE while a transfer is
+              running — the old button lived entirely inside the row's hover
+              state, so on desktop the spinner disappeared the moment your
+              pointer moved ("it just statically gets downloaded"). */}
           <button
             onClick={onDownload}
-            disabled={downloadState === 'loading'}
-            className={`hidden lg:block transition-all text-[#a7a7a7] opacity-0 group-hover:opacity-100 hover:text-white ${
-              downloadState === 'loading' ? 'animate-pulse text-[#1ed760]' : ''
-            } ${downloadState === 'done' ? 'text-[#1ed760]' : ''} ${downloadState === 'error' ? 'text-red-500' : ''}`}
-            aria-label="Download"
-            title={downloadState === 'done' ? 'Downloaded' : downloadState === 'error' ? 'Failed — try again' : 'Download this track'}
+            disabled={download.status === 'downloading'}
+            data-testid={download.status === 'idle' ? undefined : 'download-state'}
+            className={`hidden lg:block transition-all hover:text-white ${
+              download.status === 'idle'
+                ? 'text-[#a7a7a7] opacity-0 group-hover:opacity-100'
+                : 'opacity-100'
+            } ${download.status === 'downloading' ? 'text-[#1ed760]' : ''} ${
+              download.status === 'done' ? 'text-[#1ed760]' : ''
+            } ${download.status === 'error' ? 'text-red-500' : ''}`}
+            aria-label={
+              download.status === 'downloading'
+                ? `Downloading ${track.title}${
+                    download.progress === null ? '' : `, ${Math.round(download.progress * 100)} percent`
+                  }`
+                : download.status === 'done'
+                  ? `${track.title} downloaded`
+                  : download.status === 'error'
+                    ? 'Download failed — click to retry'
+                    : 'Download this track'
+            }
+            title={
+              download.status === 'downloading'
+                ? download.progress === null
+                  ? 'Downloading…'
+                  : `Downloading… ${Math.round(download.progress * 100)}%`
+                : download.status === 'done'
+                  ? 'Downloaded'
+                  : download.status === 'error'
+                    ? 'Failed — click to retry'
+                    : 'Download this track'
+            }
           >
-            {downloadState === 'loading' ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : downloadState === 'done' ? (
+            {download.status === 'downloading' ? (
+              <span className="flex items-center gap-1.5">
+                <Loader2 size={16} className="animate-spin" />
+                {download.progress !== null && (
+                  <span className="text-[11px] tabular-nums w-8 text-left">
+                    {Math.round(download.progress * 100)}%
+                  </span>
+                )}
+              </span>
+            ) : download.status === 'done' ? (
               <Check size={16} />
             ) : (
               <Download size={16} />

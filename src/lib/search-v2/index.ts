@@ -39,7 +39,8 @@ import {
   snapshotLexicon,
   SNAPSHOT_KEY,
 } from './lexicon';
-import { sigUnmet, runRescueLadder, titleAuthorityMissing, type RescueRung } from './rescue';
+import { sigUnmet, runRescueLadder, titleAuthorityMissing, type RescueRung } from './rescue'
+import { recognizeQuery, registerSegmentNames, type Recognition } from './recognize';
 import { reconcileRecordings } from './recording';
 import { compileProfile, loadCorrections } from '@/lib/mindbeat/profile'
 import type { SearchRow } from './rows'
@@ -65,6 +66,16 @@ export interface SearchV2Result {
   partialArtists?: string[];
   /** rescue provenance (for the honest label + ledger) */
   rescueRung?: RescueRung;
+  /** QUERY RECOGNITION: when the literal query could not be honoured, the
+   *  recognized one that WAS searched — the UI must say so
+   *  ("Showing results for tu chahiye"). */
+  showingFor?: string;
+  /** the query the user actually typed, when `showingFor` replaced it */
+  originalQuery?: string;
+  /** which mechanism produced `showingFor` (honest provenance) */
+  recognitionVia?: string;
+  /** a suggestion worth offering even though the results were kept */
+  didYouMean?: string;
   /** per-stage latency instrumentation (server log + response) */
   stages: StageTimings;
 }
@@ -125,6 +136,9 @@ export async function initSearchEngine(deps?: EngineDeps): Promise<void> {
       ...profileArtists,
     ];
     registerArtistLexicon(artists);
+    // …and as glue-split segments, so a run-together name ("arjitsingh")
+    // re-spaces using what this library actually contains.
+    registerSegmentNames(artists);
 
     // 3. SymSpell — snapshot restore first (cold rebuild <20 ms), scratch
     //    build as fallback
@@ -220,6 +234,8 @@ export interface SearchV2Options {
   onEarly?: (r: SearchV2Result) => void;
   /** per-stage latency sink (server log) */
   onStages?: (stages: StageTimings) => void;
+  /** internal: the recognition pass must not re-enter itself */
+  internal?: { noRecognition?: boolean };
 }
 
 /**
@@ -234,6 +250,13 @@ export async function searchMusicV2(
   const deps: EngineDeps = opts.deps ?? prismaLearnDeps();
   const tS0 = Date.now();
   await initSearchEngine(deps);
+  // QUERY RECOGNITION starts NOW and runs alongside the literal search: its
+  // local layers are free and the provider layer only fires for a query that
+  // looks malformed, so the honest query is usually ready before the pools are.
+  const recogPromise: Promise<Recognition | null> =
+    opts.internal?.noRecognition
+      ? Promise.resolve(null)
+      : recognizeQuery(query, { signal: opts.signal }).catch(() => null);
   const plan = planSearch(query);
   const s0PlanMs = Date.now() - tS0;
   const corrId = correlationId();
@@ -293,6 +316,12 @@ export async function searchMusicV2(
       topReason: rows[0]?.reason,
       sigState: retrieval.sig?.sigState as SigState | undefined,
       partialArtists: retrieval.sig?.partialArtists,
+      // a cached generation keeps its declaration verbatim — a result that
+      // was served as "Showing results for …" must still say so
+      showingFor: retrieval.sig?.showingFor,
+      originalQuery: retrieval.sig?.originalQuery,
+      recognitionVia: retrieval.sig?.recognitionVia,
+      didYouMean: retrieval.sig?.didYouMean,
       stages,
       ...base,
     };
@@ -550,6 +579,88 @@ export async function searchMusicV2(
   //    junk that doesn't contain it (fabricating sigState='rescued' over
   //    an unrelated list). Thin-after-rescue is the honest state.
   const tRecover = Date.now();
+
+  // ── S4.0 QUERY RECOGNITION PASS ──
+  //
+  // A result set that does not MATCH the query is not an answer, even when it
+  // is large. "taylor swif" returns a page of songs *about* Taylor Swift
+  // ("Taylor Swift Masala", "Not a Taylor Swift Song") while she herself sits
+  // at #5 — every row matches one token of two, so nothing is wrong enough to
+  // trigger the old thin-only gate, yet nothing is right either.
+  //
+  // The trigger is therefore match quality, not row count: the literal query
+  // was honoured only if some top row covers (almost) every token. When it was
+  // not — or when the set is thin — we ask the recognizer what was meant, and
+  // search THAT. The literal hits are never discarded; they follow behind.
+  const matchStrength = (list: SearchRow[]): number =>
+    list.slice(0, 5).reduce((m, r) => Math.max(m, r.queryMatch ?? 0), 0);
+  const literalBest = matchStrength(rows);
+  const unrecognized =
+    !opts.signal?.aborted &&
+    sigState !== 'rescued' &&
+    (rows.length < THIN_THRESHOLD || literalBest < 0.8);
+
+  let settledRecognition: Recognition | null = null;
+  if (unrecognized) {
+    const recognized = await recogPromise.catch(() => null);
+    settledRecognition = recognized;
+    if (
+      recognized?.showingFor &&
+      recognized.confident &&
+      recognized.showingFor !== plan.normalized &&
+      !opts.signal?.aborted
+    ) {
+      const { showingFor, originalQuery, via } = {
+        showingFor: recognized.showingFor,
+        originalQuery: query,
+        via: recognized.via ?? undefined,
+      };
+      const alt = await searchMusicV2(recognized.showingFor, {
+        deps: opts.deps,
+        signal: opts.signal,
+        onEarly: opts.onEarly
+          ? (r) => opts.onEarly?.({ ...r, showingFor, originalQuery, recognitionVia: via })
+          : undefined,
+        internal: { noRecognition: true },
+      })
+      // Pick the better answer, not blindly the corrected one: if the reading
+      // we recognized matches the query LESS well than what we already have,
+      // the literal set stands and the correction is offered as a suggestion.
+      const altBest = matchStrength(alt.rows);
+      if (alt.rows.length > 0 && (rows.length === 0 || altBest >= literalBest) && !opts.signal?.aborted) {
+        // The corrected result is the answer. Anything the literal query DID
+        // find is kept behind it (never dropped — it is what the user typed),
+        // de-duplicated by id so the same recording cannot appear twice.
+        const have = new Set(alt.rows.map((r) => r.id));
+        const literalExtras = rows.filter((r) => !have.has(r.id));
+        const merged = [...alt.rows, ...literalExtras].slice(0, 40);
+        // Cache the DECISION under the literal query too, so a repeat of
+        // "tuchaiye" is answered from cache with its label intact instead of
+        // paying for the recognition loop again.
+        if (!opts.signal?.aborted) {
+          rememberResults(plan, merged, {
+            sigState: alt.sigState,
+            partialArtists: alt.partialArtists,
+            showingFor,
+            originalQuery,
+            recognitionVia: via,
+            didYouMean: showingFor,
+          });
+        }
+        return {
+          ...alt,
+          rows: merged,
+          showingFor,
+          originalQuery,
+          recognitionVia: via,
+          correlationId: corrId,
+          latencyMs: Date.now() - t0,
+          stages: { ...alt.stages, totalMs: Date.now() - t0 },
+        };
+      }
+    }
+  }
+
   if (rows.length < THIN_THRESHOLD && !opts.signal?.aborted && sigState !== 'rescued') {
     const deadline = Date.now() + 1500;
     let rungsUsed = 0;
@@ -590,6 +701,17 @@ export async function searchMusicV2(
     learnMs: 0, totalMs,
   };
 
+  // A good result set is never replaced — but when the literal answer was
+  // weak and recognition found a different reading that did not beat it, the
+  // reading is still worth OFFERING as "Did you mean …". (The recognizer was
+  // already awaited above, so this costs nothing.)
+  const didYouMean =
+    settledRecognition?.showingFor &&
+    settledRecognition.showingFor !== plan.normalized &&
+    rows.length > 0
+      ? settledRecognition.showingFor
+      : undefined;
+
   const result: SearchV2Result = {
     rows,
     latencyMs: totalMs,
@@ -600,6 +722,7 @@ export async function searchMusicV2(
     sigState,
     partialArtists,
     rescueRung,
+    didYouMean,
     stages,
     ...base,
   };

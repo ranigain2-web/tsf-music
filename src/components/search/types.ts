@@ -63,6 +63,15 @@ export interface SearchV2Final {
   plan?: SearchPlanLite
   topReason?: string
   corrected?: string
+  /** QUERY RECOGNITION: set when the engine searched a different (recognized)
+   *  reading of the query than the one typed — the UI must show
+   *  "Showing results for {showingFor}" and offer the literal query back. */
+  showingFor?: string
+  originalQuery?: string
+  /** which mechanism produced showingFor: split | ortho | spelling | suggest */
+  recognitionVia?: string
+  /** a correction worth offering when the results were kept as-is */
+  didYouMean?: string
   relaxedFrom?: string
   relaxedQuery?: string
   latencyMs?: number

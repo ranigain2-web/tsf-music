@@ -15,6 +15,7 @@ import {
   purgeStreamCache,
   probeAllProviders,
   ytDlpBinary,
+  streamActivitySnapshot,
 } from '@/lib/ytm/stream'
 import { summarizeMetrics, resolveMetricsSnapshot } from '@/lib/ytm/metrics'
 import { aiStatus } from '@/lib/ai/engine'
@@ -68,6 +69,10 @@ export async function GET(req: Request) {
     ai: aiStatus(),
     resolveMetrics: metrics,
     recentResolves: resolveMetricsSnapshot().slice(-20).reverse(),
+    // Foreground/background picture for the latency story: how many resolves
+    // the USER asked for, and how many times a warmer stood down so it could
+    // not delay one. `preempted` growing means the priority gate is working.
+    streamActivity: streamActivitySnapshot(),
     relayInstances,
   })
 }

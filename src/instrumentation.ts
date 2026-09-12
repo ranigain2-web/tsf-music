@@ -25,6 +25,13 @@
  * Tauri shell health-gates on /api/health before it shows the window.
  */
 
+/** Grace period before ANY stream warming may be attempted at boot. */
+const BOOT_STREAM_WARM_GRACE_MS = 10_000
+/** How long we are willing to keep waiting for the user to go quiet. */
+const BOOT_STREAM_WARM_MAX_WAIT_MS = 45_000
+/** Quiet window a background warms needs the user to have been idle for. */
+const WARM_QUIET_MS = 8_000
+
 export async function register() {
   // Never run during build / static analysis phases or in the edge runtime.
   if (process.env.NEXT_RUNTIME !== 'nodejs') return
@@ -105,20 +112,43 @@ async function warmHomeFeed(): Promise<void> {
 }
 
 /**
- * THE STREAMING-LATENCY LEVER: warm the resolver for the tracks the user most
- * recently played — which is exactly what Quick Picks serves first. This
- * drives the full provider chain (JioSaavn / yt-dlp + POT / InnerTube) once at
- * boot, so the first tap after launch is as fast as the always-warm server the
- * phone talks to. Bounded to 3 tracks and opt-out via TSF_NO_STREAM_WARM=1.
+ * THE STREAMING-LATENCY LEVER: warm the resolver for the track the user most
+ * recently played — which is exactly what Quick Picks serves first — so the
+ * first tap after launch is as fast as the always-warm server the phone talks
+ * to. Opt-out via TSF_NO_STREAM_WARM=1.
  *
- * Not run before the listener is up, and not before the cheap prerequisite
- * probes — it spawns the heaviest work (yt-dlp subprocesses + BotGuard token
- * minting) and must not compete with the Tauri shell's health gate.
+ * IT YIELDS TO THE USER (the "Mac takes 5-10 s per song" fix). Warming at boot
+ * used to be unconditional and three tracks wide, and each warm track spawns
+ * its own yt-dlp subprocess (≤2 at a time, ≤25 s each). On a cold desktop
+ * launch that spent the whole first half-minute holding the provider slots —
+ * so every tap in that window queued behind a track the user had not asked
+ * for. That is the exact shape of the reported symptom: "at the very start the
+ * songs don't load, and after a while they start loading".
+ *
+ * Now the boot warm waits out a grace period, then requires a genuinely quiet
+ * window (no user-initiated resolve in the last 8 s), warms ONE track, and
+ * abandons the whole attempt if the user is still listening. The client's own
+ * prefetch + Deep Warm already cover a user who is actively playing.
  */
 async function warmRecentTracks(): Promise<void> {
   if (process.env.TSF_NO_STREAM_WARM === '1') return
   const { db } = await import('@/lib/db')
-  const { warmStreams } = await import('@/lib/ytm/stream')
+  const { warmStreams, waitForQuiet, userActiveWithin } = await import('@/lib/ytm/stream')
+
+  // 1. Never in the first 10 s: the shell's health poll, the first screen and
+  //    the user's first tap all live there, and they outrank a speculative
+  //    full-length upgrade.
+  await new Promise((r) => setTimeout(r, BOOT_STREAM_WARM_GRACE_MS))
+
+  // 2. Then wait for a real quiet window, bounded. `waitForQuiet` returns false
+  //    the moment the deadline passes while the user is still active.
+  const quiet = await waitForQuiet(WARM_QUIET_MS, BOOT_STREAM_WARM_MAX_WAIT_MS)
+  if (!quiet || userActiveWithin(WARM_QUIET_MS)) {
+    if (process.env.TSF_WARMUP_DEBUG === '1') {
+      console.log('[warmup] recent-streams: stood down — user is playing')
+    }
+    return
+  }
 
   const rows = await db.historyItem.findMany({
     orderBy: { playedAt: 'desc' },
@@ -126,6 +156,8 @@ async function warmRecentTracks(): Promise<void> {
     include: { track: true },
   })
 
+  // 3. ONE track. The user's own prefetch warms the rest as they listen; this
+  //    exists only so the very first tap on a fresh launch is warm.
   const ids: string[] = []
   const meta: Record<string, { title?: string; artist?: string; durationSec?: number }> = {}
   for (const r of rows) {
@@ -137,9 +169,9 @@ async function warmRecentTracks(): Promise<void> {
       artist: t.artistName || undefined,
       durationSec: t.duration > 0 ? t.duration : undefined,
     }
-    if (ids.length >= 3) break
+    break
   }
   if (ids.length === 0) return
 
-  await warmStreams(ids, meta)
+  await warmStreams(ids, meta, { quietMs: WARM_QUIET_MS })
 }

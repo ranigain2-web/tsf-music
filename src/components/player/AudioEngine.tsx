@@ -690,11 +690,16 @@ export function AudioEngine() {
   }, [queueIndex, queueVersion])
 
   // ---- Deep Warm: idle background full-length upgrades ----
-  // When a track has been playing steadily for 10s, offer the server the
-  // current + next few queue ids. Tracks cached as 30s previews/synth get a
-  // full provider re-race (yt-dlp + POT hero path) so the NEXT play is
-  // full-length. Server-side guards (in-flight set, 20s batch gap) make
-  // repeat calls cheap no-ops.
+  // When a track has been playing steadily for 10s, offer the server the NEXT
+  // few queue ids. Tracks cached as 30s previews/synth get a full provider
+  // re-race (yt-dlp + POT hero path) so the NEXT play is full-length.
+  //
+  // Deliberately EXCLUDES the track that is playing: it is already resolved
+  // and on the wire, so warming it buys nothing while costing a whole provider
+  // race — the budget belongs to what the user is about to hear. (This used to
+  // send the current track plus five more, which is what made every handoff on
+  // a cold engine queue behind background work.) Server-side guards (in-flight
+  // join, quiet-window gate, 20s batch gap) make repeat calls cheap no-ops.
   const deepWarmDoneRef = useRef<string | null>(null)
   useEffect(() => {
     if (!isPlaying) return
@@ -704,9 +709,10 @@ export function AudioEngine() {
     if (deepWarmDoneRef.current === cur.videoId) return
     const timer = setTimeout(() => {
       const { queue: q, queueIndex: qi } = usePlayer.getState()
-      const upcoming = q.slice(qi, qi + 6)
+      // next few only — never the track already playing (see the note above)
+      const upcoming = q.slice(qi + 1, qi + 5)
       if (!upcoming.length) return
-      deepWarmDoneRef.current = upcoming[0].videoId
+      deepWarmDoneRef.current = cur.videoId
       const meta: Record<string, { title?: string; artist?: string; durationSec?: number }> = {}
       for (const t of upcoming) {
         meta[t.videoId] = {

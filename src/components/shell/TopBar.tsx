@@ -19,6 +19,14 @@ export function TopBar() {
   const [scrolled, setScrolled] = useState(false)
   const [q, setQ] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  // Echo guard: the live-replace below writes a TRIMMED copy of the query into
+  // the nav store, and the effect that syncs from the store used to write it
+  // straight back into this input — which silently deleted the space in
+  // "tu chahiye" ("tu " → "tu" → then "c" appended ⇒ "tuc…"). We now remember
+  // what we pushed, and only adopt the store's value when it is an EXTERNAL
+  // change (recent search, suggestion, back/forward).
+  const pushedRef = useRef<string | null>(null)
+  const prevViewType = useRef<string>('')
 
   // scroll detection for the bar's background fade
   useEffect(() => {
@@ -30,8 +38,19 @@ export function TopBar() {
   }, [view])
 
   useEffect(() => {
-    if (view.type === 'search' && view.q) setQ(view.q)
-    if (view.type === 'search') inputRef.current?.focus()
+    if (view.type !== 'search') {
+      prevViewType.current = view.type
+      pushedRef.current = null
+      return
+    }
+    const incoming = view.q ?? ''
+    const enteredSearch = prevViewType.current !== 'search'
+    prevViewType.current = 'search'
+    // Adopt only when we just entered search, or when the store carries a query
+    // we did not push (an external navigation) — never to undo in-progress typing.
+    if (enteredSearch || incoming !== (pushedRef.current ?? '')) setQ(incoming)
+    pushedRef.current = incoming
+    inputRef.current?.focus()
   }, [view])
 
   const canBack = stack.length > 1
@@ -90,11 +109,15 @@ export function TopBar() {
               if (liveReplaceTimer.current) clearTimeout(liveReplaceTimer.current)
               const v = e.target.value
               liveReplaceTimer.current = setTimeout(() => {
-                if (v.trim()) replace({ type: 'search', q: v.trim() })
+                const next = v.trim()
+                if (!next) return
+                pushedRef.current = next
+                replace({ type: 'search', q: next })
               }, 250)
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && q.trim()) {
+                pushedRef.current = q.trim()
                 push({ type: 'search', q: q.trim() })
               }
             }}
@@ -106,6 +129,7 @@ export function TopBar() {
             <button
               onClick={() => {
                 setQ('')
+                pushedRef.current = ''
                 inputRef.current?.focus()
               }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-[#b3b3b3] hover:text-white"
