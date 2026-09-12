@@ -99,6 +99,7 @@ export function TopBar() {
               }
             }}
             placeholder="What do you want to listen to?"
+            aria-label="Search"
             className="w-full h-12 rounded-full bg-[#242424] text-white placeholder:text-[#b3b3b3] pl-11 pr-10 text-sm font-medium outline-none focus:ring-1 focus:ring-white hover:ring-1 hover:ring-white/60 transition-shadow"
           />
           {q && (

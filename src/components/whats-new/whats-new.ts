@@ -7,7 +7,13 @@
  * it renders after hydration and dismisses are permanent per version.
  */
 
-export const APP_VERSION = '0.4.0'
+/**
+ * Injected by next.config.ts straight from package.json so the on-screen badge
+ * can never drift from the released version again (it previously said 0.4.0
+ * while the app shipped as 0.4.1). The fallback only matters if the component
+ * is ever rendered outside a Next build (e.g. a unit test).
+ */
+export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '0.0.0'
 
 export interface WhatsNewEntry {
   version: string
@@ -17,6 +23,17 @@ export interface WhatsNewEntry {
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  {
+    version: '0.4.2',
+    title: 'Honest diagnostics, instant first tap, real keyboard control',
+    date: '2026-09-12',
+    items: [
+      'Engine health — open it from the sidebar to see every provider, its latency, what is cooling down and exactly which fallback you would get, plus a one-tap live playback probe',
+      'Instant first tap — the engine warms yt-dlp, the AI config and your three most recent tracks while it boots, so a repeat play starts in milliseconds instead of seconds',
+      'Queue keyboard reorder — focus a row\u2019s drag handle and press Space, arrows, Space. It used to look wired up and silently do nothing',
+      'Announced search — the desktop search box now has an accessible name for screen readers',
+    ],
+  },
   {
     version: '0.4.0',
     title: 'Real songs, deep results, zero repeats',

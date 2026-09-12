@@ -63,6 +63,14 @@ function SortableRow({
     id: track.videoId + '-' + realIdx,
     disabled: false,
   })
+  // dnd-kit wires the KeyboardSensor activator into `listeners.onKeyDown`.
+  // Declaring our own onKeyDown AFTER spreading `listeners` would silently
+  // replace it, so keyboard reordering would look wired up (the handle is a
+  // focusable, announced "sortable" button) but never actually start a drag.
+  // Keep a handle on it and forward the event first.
+  const dndKeyDown = (listeners as Record<string, unknown> | undefined)?.onKeyDown as
+    | ((e: React.KeyboardEvent<HTMLButtonElement>) => void)
+    | undefined
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -131,7 +139,13 @@ function SortableRow({
           {...listeners}
           {...attributes}
           onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            // Let dnd-kit own its activation keys (Space/Enter starts a drag,
+            // arrows move, Space/Enter drops, Escape cancels)…
+            dndKeyDown?.(e)
+            // …then keep the row's play-on-Enter/Space handler from firing too.
+            e.stopPropagation()
+          }}
           className="text-white/30 hover:text-white/70 shrink-0 p-0.5 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity touch-none"
           aria-label={`Reorder ${track.title}`}
           title="Drag to reorder"

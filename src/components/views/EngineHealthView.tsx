@@ -331,6 +331,7 @@ export function EngineHealthView() {
             onChange={(e) => setProbeId(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void runProbe()}
             placeholder="video id or saavn-… id"
+            aria-label="Track id to test"
             className="flex-1 min-w-[200px] h-10 px-3 rounded-md bg-[#1f1f1f] border border-white/10 text-sm text-white placeholder:text-[#6a6a6a] focus:outline-none focus:border-[#1ed760]/50"
           />
           <button

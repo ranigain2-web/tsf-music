@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
+import pkg from "./package.json";
 
 const nextConfig: NextConfig = {
+  env: {
+    // Single source of truth for the on-screen version badge. It has drifted
+    // before (badge showed v0.4.0 while the release was 0.4.1), so derive it
+    // from package.json instead of hand-copying it into a component.
+    NEXT_PUBLIC_APP_VERSION: pkg.version,
+  },
   // Pin the Turbopack workspace root to THIS project. Without it, Next walks
   // up the directory tree and any stray package.json in a parent folder
   // (e.g. ~/package.json from an unrelated project) makes that folder the

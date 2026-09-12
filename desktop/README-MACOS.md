@@ -41,6 +41,103 @@ a browser — that is what causes the repeated Gatekeeper blocks.
 
 ---
 
+## Step-by-step install (free path, no Apple account)
+
+This is the whole procedure for the ad-hoc-signed release. Ten minutes, once.
+
+### Step 0 — What you need
+
+- Any Mac (Intel or Apple Silicon), macOS 10.15 or newer.
+- Terminal — press `⌘ Space`, type `Terminal`, press Return.
+- No Apple Developer account. No $99/year. Nothing to buy.
+
+### Step 1 — Install the app
+
+Copy this whole line into Terminal and press Return:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ranigain2-web/tsf-music/main/desktop/install-macos.sh | bash
+```
+
+It prints what it is doing at each stage: picking your architecture, finding
+the newest release, downloading (~290 MB Intel / ~273 MB Apple Silicon),
+verifying the checksum, verifying the bundle is really built for your CPU,
+installing to `/Applications`, then launching the app. It takes a few minutes
+on a normal connection.
+
+### Step 2 — Confirm there is nothing to approve
+
+Check the app's signature and quarantine state at any time:
+
+```bash
+xattr -p com.apple.quarantine "/Applications/TSF Music.app"; echo "exit=$?"
+```
+
+`exit=1` with no value is the **good** outcome: no quarantine flag, so macOS
+has nothing to warn you about. Because the file was created by `curl` and not
+by your browser, macOS never attaches the flag in the first place.
+
+### Step 3 — Use the app
+
+Launch **TSF Music** from `/Applications` (or Spotlight). It boots its own
+local engine and opens when the engine answers its health check — a few
+seconds on first run, faster afterwards. The first thing you tap is already
+warm: the engine probes `yt-dlp`, the AI gateway config and your three most
+recent tracks while it boots.
+
+### Step 4 — Upgrading later (this is where the prompts used to come back)
+
+Re-run the **exact same Step 1 command**. It is idempotent: it finds the newer
+release, quits the running copy, replaces it and relaunches. You will not be
+asked to approve anything, because again nothing was browser-downloaded.
+
+> The one thing that must not change: always install with the `curl` command,
+> never by downloading the DMG in Safari/Chrome and double-clicking it. A
+> browser download is what adds the quarantine flag, and installing a **new**
+> build means a new signature, so macOS asks again from scratch. Same binary,
+> downloaded two ways, behaves two different ways — the difference is the flag,
+> not the signature.
+
+### Step 5 — If anything looks wrong
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ranigain2-web/tsf-music/main/desktop/tsf-doctor.sh | bash
+```
+
+It prints the app version, signature authority, quarantine state, engine
+health, every streaming provider's live/cooling state, resolve latency
+percentiles, and then resolves a real track so you can see plainly whether you
+got **full-length audio**, a **30 s preview**, or the **offline synth**.
+
+### Step 6 — If you ever *did* install from a browser DMG
+
+You do not need to reinstall. One time only:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/TSF Music.app"
+```
+
+Or double-click `First-Run-MacOS.command` (shipped inside the DMG), which does
+the same thing with a friendly explanation. After that, the app launches
+normally — until you install a *new build*, at which point the same one-time
+step applies. That is exactly the repetition the `curl` path removes.
+
+### Step 7 — What the $99/year option would add
+
+| | free path (above) | Apple Developer Program ($99/yr) |
+| --- | --- | --- |
+| Your own installs | zero prompts | zero prompts |
+| Installing from a browser DMG | one one-time approval | zero prompts |
+| Sending the app to someone else | they repeat Step 1 (or Step 6) | zero prompts for them too |
+| Ongoing upkeep | none | certificate + app-specific password, renewed yearly |
+| Notarization pipeline | dormant in CI | runs on every tag |
+
+If you are the only user and you install with Step 1, the paid option buys you
+nothing you will notice. It becomes worth paying when you want other people to
+double-click a downloaded DMG and have it just open.
+
+---
+
 ### ✅ Recommended: one command, no prompts, no Apple account
 
 Paste this into **Terminal** and press Return:
@@ -64,7 +161,7 @@ It is idempotent — re-running it is a safe upgrade. Options:
 
 | Env var | Effect |
 | --- | --- |
-| `TSF_TAG=v0.4.1` | install a specific release instead of the newest |
+| `TSF_TAG=v0.4.2` | install a specific release instead of the newest |
 | `TSF_DEST=~/Applications` | install somewhere other than `/Applications` |
 | `TSF_NO_LAUNCH=1` | install without opening the app |
 | `TSF_FORCE=1` | reinstall even when that version is already present |
@@ -158,6 +255,21 @@ Two signing details that are easy to get wrong, both handled in `macos.yml`:
 dormant until the secrets are added. Validate one dispatch run before trusting
 it; the ad-hoc path remains the fallback and still ships a working app.
 
+## Verifying a build by hand
+
+Two oracles, both runnable against any origin:
+
+```bash
+# API surface (134 checks)
+TSF_BASE=http://127.0.0.1:3000 bun scripts/e2e-check.ts
+
+# Real browser, real UI (61 checks) — needs `npx playwright install chromium` once
+TSF_BASE=http://127.0.0.1:3000 node scripts/e2e-browser/index.mjs
+```
+
+Both default to `http://127.0.0.1:3000` and write browser screenshots to
+`./qa-shots` (override with `TSF_SHOTS`). Neither is part of the app runtime.
+
 ## Logs / data
 
 | What | Where |
@@ -222,6 +334,7 @@ Prisma's `file:` URL parsing on every Mac. It is now percent-encoded
 | `SHA256SUMS.txt` published | `release` job computes it from the shipped artifacts on every tag |
 | Doctor reports honestly | run against a live engine: 3/16 providers, per-provider ok counts, and a real full-length resolve |
 | Whole API surface | `scripts/e2e-check.ts` — 134 checks, green against **both** `bun run dev` and the production `standalone` build |
+| Whole UI, in a real browser | `scripts/e2e-browser/` — 61 checks in headless Chromium (shell, playback, playlist indicator, engine health, search pagination, AI generator, queue reorder, lyrics, shortcuts, mobile at 390×844 with the byte proxy), green against dev **and** the production `standalone` build. Run: `npx playwright install chromium && node scripts/e2e-browser/index.mjs` |
 
 ## In-app diagnostics
 
