@@ -22,8 +22,10 @@
  */
 
 import { ytmFetch } from '@/lib/ytm/innertube';
+import { SEARCH_FILTERS } from '@/lib/ytm/clients';
 import { parseHumanCount, type SearchRow } from './rows';
 import { reconcileRecordings } from './recording';
+import { orderWithLongForm, honoursTopCard, wantsLongForm } from './longform';
 
 // ── kill switch (reference BAR 6: breakage can never degrade the core) ──
 
@@ -173,7 +175,7 @@ function toRow(item: unknown): SearchRow | null {
 
 const JUNK_KINDS = new Set(['episode', 'podcast', 'profile']);
 
-function collectRows(data: unknown, skipTopCard = true): { tracks: SearchRow[]; chipSongs?: string } {
+function collectRows(data: unknown, skipTopCard = true): { tracks: SearchRow[]; chipSongs?: string; chipVideos?: string } {
   const tracks: SearchRow[] = [];
   const root = data as Record<string, unknown>;
   const tabs = (root?.contents as Record<string, unknown> | undefined)?.tabbedSearchResultsRenderer as
@@ -206,7 +208,8 @@ function collectRows(data: unknown, skipTopCard = true): { tracks: SearchRow[]; 
     collect(root);
   }
   const chipSongs = chipParamsFor(data, /^[Ss]ongs$/);
-  return { tracks, chipSongs };
+  const chipVideos = chipParamsFor(data, /^[Vv]ideos$/);
+  return { tracks, chipSongs, chipVideos };
 }
 
 function continuationOf(data: unknown): string | undefined {
@@ -282,16 +285,26 @@ export async function ytSearchMusic(
     return { tracks: [], latencyMs: 0, unavailable: true };
   }
   if (signal?.aborted) return { tracks: [], latencyMs: 0, unavailable: false };
+  // A long-form query gets a THIRD parallel probe: the videos filter. The
+  // 1-hour mixes are video rows and the songs filter cannot see all of them
+  // (measured: 16-20 extra long rows per long-form query). Same wall time —
+  // the probes race, so latency is max(probe), not sum(probe).
+  const longForm = wantsLongForm(query);
   let primary: unknown = null;
   let fallback: unknown = null;
+  let videosProbe: unknown = null;
   try {
-    const [p, f] = await Promise.all([
+    const [p, f, v] = await Promise.all([
       ytmFetch<unknown>('search', { query, params: SONGS_FILTER_PARAMS }, { cacheTtlMinutes: 10, retries: 1 }).catch(() => null),
       ytmFetch<unknown>('search', { query }, { cacheTtlMinutes: 10, retries: 1 }).catch(() => null),
+      longForm
+        ? ytmFetch<unknown>('search', { query, params: SEARCH_FILTERS.videos }, { cacheTtlMinutes: 10, retries: 1 }).catch(() => null)
+        : Promise.resolve(null),
     ]);
     primary = p;
     fallback = f;
-    if (!primary && !fallback) throw new Error('both empty');
+    videosProbe = v;
+    if (!primary && !fallback && !videosProbe) throw new Error('all empty');
     noteYtSuccess();
   } catch {
     noteYtFailure();
@@ -303,7 +316,10 @@ export async function ytSearchMusic(
   let primaryTracks: SearchRow[] = [];
   let continuation: string | undefined;
   if (primary) {
-    const c = collectRows(primary);
+    // The top-result card is normally skipped (for a fuzzy song query it
+    // carries a lo-fi mix — the "tu chaiye" rank-1 fix). For a query that ASKS
+    // for long-form, that card is the best answer on the page, so honour it.
+    const c = collectRows(primary, !longForm);
     primaryTracks = c.tracks;
     continuation = continuationOf(primary);
     if (c.chipSongs && c.chipSongs !== SONGS_FILTER_PARAMS && primaryTracks.length < 5 && fallback) {
@@ -321,21 +337,36 @@ export async function ytSearchMusic(
   }
 
   const fallbackTracks = fallback ? collectRows(fallback).tracks : [];
+  const videoTracks = videosProbe ? collectRows(videosProbe, !longForm).tracks : [];
   const fbCont = fallback ? continuationOf(fallback) : undefined;
   if (!continuation) continuation = fbCont;
 
   // merge: songs-filter list FIRST (official recording rank 1), then
-  // fallback rows not already present (videos, spell corrections)
+  // fallback rows not already present (videos, spell corrections), then the
+  // videos-filter probe (long-form recall).
   const byId = new Map<string, SearchRow>();
   for (const t of primaryTracks) if (!byId.has(t.id)) byId.set(t.id, t);
   for (const t of fallbackTracks) if (!byId.has(t.id)) byId.set(t.id, t);
+  for (const t of videoTracks) if (!byId.has(t.id)) byId.set(t.id, t);
   const merged = [...byId.values()];
 
+  // ── LONG-FORM (the "1 hour lofi mix" fix) ──
+  //
+  // This used to read `ytKind !== 'song' && duration <= 15 * 60`, which
+  // silently deleted the entire long-form catalog — the 1-hour lofi sets, the
+  // 8-hour rain beds, the 10-hour white noise. See ./longform.ts for the
+  // measured loss (16-20 rows per long-form query, up to 99 hours long).
+  //
+  // A different cap would only move the boundary, so the rule is now:
+  //   never DROP a long row; let the QUERY decide whether it leads or trails.
+  // Rows with no duration at all are still dropped here — they are the
+  // malformed echoes the provider occasionally emits, not playable content.
   const songs = merged.filter((t) => t.ytKind === 'song');
-  const videos = merged.filter(
-    (t) => t.ytKind !== 'song' && (t.duration ?? 0) > 0 && (t.duration ?? 0) <= 15 * 60,
+  const others = merged.filter((t) => t.ytKind !== 'song' && (t.duration ?? 0) > 0);
+  const ordered = orderWithLongForm(
+    reconcileRecordings([...songs, ...others]) as SearchRow[],
+    query,
   );
-  const ordered = reconcileRecordings([...songs, ...videos]) as SearchRow[];
   return { tracks: ordered.slice(0, limit), latencyMs: Date.now() - t0, unavailable: false, continuation };
 }
 
@@ -344,6 +375,8 @@ export async function ytSearchMusic(
 export async function ytSearchMusicMore(
   continuation: string,
   signal?: AbortSignal,
+  /** the query this continuation belongs to — needed to order long-form pages */
+  query = '',
 ): Promise<YtMoreOutcome> {
   if (!continuation || signal?.aborted) return { tracks: [], error: true };
   if (!ytAvailable()) return { tracks: [], error: true };
@@ -358,13 +391,15 @@ export async function ytSearchMusicMore(
       return { tracks: [], error: true };
     }
     noteYtSuccess();
-    const { tracks } = collectRows(data);
+    const { tracks } = collectRows(data, !wantsLongForm(query));
     const next = continuationOf(data);
+    // same long-form rule as page 1 — never drop, only reorder
     const songs = tracks.filter((t) => t.ytKind === 'song');
-    const videos = tracks.filter(
-      (t) => t.ytKind !== 'song' && (t.duration ?? 0) > 0 && (t.duration ?? 0) <= 15 * 60,
+    const others = tracks.filter((t) => t.ytKind !== 'song' && (t.duration ?? 0) > 0);
+    const ordered = orderWithLongForm(
+      reconcileRecordings([...songs, ...others]) as SearchRow[],
+      query,
     );
-    const ordered = reconcileRecordings([...songs, ...videos]) as SearchRow[];
     return { tracks: ordered, continuation: next };
   } catch {
     noteYtFailure();

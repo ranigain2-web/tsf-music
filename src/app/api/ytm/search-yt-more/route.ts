@@ -6,19 +6,21 @@ export const dynamic = 'force-dynamic';
 /**
  * POST /api/ytm/search-yt-more
  * YouTube deep pagination (R8-P3) — walks one continuation page.
- * Body: { continuation: string }
+ * Body: { continuation: string, query?: string }
+ * `query` is only used to order a long-form page the same way page 1 orders
+ * its rows (long-form queries lead with the mixes) — it never filters.
  * Resolves (never rejects the contract): transport failure →
  * { tracks: [], error: true } so the caller keeps the token + hasMore
  * (a network blip is not end-of-catalog). Honest end → no continuation.
  */
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json().catch(() => ({}))) as { continuation?: string };
+    const body = (await req.json().catch(() => ({}))) as { continuation?: string; query?: string };
     const continuation = (body.continuation || '').trim();
     if (!continuation) {
       return NextResponse.json({ tracks: [], continuation: null, end: true });
     }
-    const page = await ytSearchMusicMore(continuation, req.signal);
+    const page = await ytSearchMusicMore(continuation, req.signal, (body.query || '').trim());
     if (page.error) {
       return NextResponse.json({ tracks: [], error: true });
     }

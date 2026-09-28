@@ -19,6 +19,7 @@ import { clusterVersions, mergePools, type Candidate } from '../src/lib/search-v
 import { rankRows, REASON_LINES, withReasonLines } from '../src/lib/search-v2/rank'
 import { titleAuthorityMissing } from '../src/lib/search-v2/rescue'
 import { splitGluedToken, similarity, recognizeQuery, registerSegmentNames } from '../src/lib/search-v2/recognize'
+import { wantsLongForm, isLongFormDuration, orderWithLongForm, honoursTopCard } from '../src/lib/search-v2/longform'
 
 let pass = 0
 let fail = 0
@@ -149,6 +150,60 @@ try {
   }
 } catch {
   console.log('SKIP  route ping (unreachable — sandbox network)')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LONG-FORM — the "1 hour lofi mix" class.
+//
+// The bug this locks down: the YouTube source filtered
+// `ytKind !== 'song' && duration <= 15 * 60`, which deleted the whole
+// long-form catalog (measured: 16-20 rows per long-form query, up to 99 h).
+// A future cap would be just as wrong, so the contract is "never drop, and
+// let the QUERY decide the order".
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n— long-form intent + ordering —')
+
+{
+  const longQueries = [
+    'lofi one hour', 'rain sounds for sleeping', 'white noise 10 hours',
+    'sleep music 8 hours', 'study with me 1 hour', 'lofi hip hop radio',
+    'chill beats to relax', '1 hour deep sleep music', 'brown noise',
+    'meditation music', 'nonstop hindi mix', 'lofi beats to study to',
+  ]
+  for (const q of longQueries) check(`long-form intent: "${q}"`, wantsLongForm(q) === true, `wantsLongForm=${wantsLongForm(q)}`)
+
+  const songQueries = [
+    'tu chahiye', 'kesariya', 'arijit singh', 'tum hi ho', 'taylor swift',
+    'the longest hour', 'shape of you', 'blinding lights', 'kesariya lofi',
+  ]
+  for (const q of songQueries.filter((x) => x !== 'kesariya lofi')) {
+    check(`no long-form intent: "${q}"`, wantsLongForm(q) === false, `wantsLongForm=${wantsLongForm(q)}`)
+  }
+  // "kesariya lofi" is a genuine ambiguity — the lofi keyword wins, and that is
+  // the honest reading (the user asked for a lofi version).
+  check('a lofi version of a song counts as long-form-ish', wantsLongForm('kesariya lofi') === true)
+
+  check('20:00 is not long-form', isLongFormDuration(1199) === false, `1199s`)
+  check('20:00 exactly is long-form', isLongFormDuration(1200) === true, `1200s`)
+  check('3 h 3 m is long-form', isLongFormDuration(11017) === true)
+  check('unknown duration is never long-form', isLongFormDuration(0) === false)
+
+  const rows = [
+    { id: 'song1', duration: 214 },
+    { id: 'mix1', duration: 3608 },
+    { id: 'song2', duration: 191 },
+    { id: 'mix2', duration: 11017 },
+  ]
+  const forLong = orderWithLongForm(rows, 'lofi one hour').map((r) => r.id)
+  check('long-form query leads with the mixes', forLong[0].startsWith('mix') && forLong[1].startsWith('mix'), JSON.stringify(forLong))
+  check('long-form query KEEPS every row (nothing dropped)', forLong.length === rows.length, JSON.stringify(forLong))
+  const forSong = orderWithLongForm(rows, 'tu chahiye').map((r) => r.id)
+  check('song query still leads with songs', forSong[0] === 'song1' && forSong[1] === 'song2', JSON.stringify(forSong))
+  check('song query KEEPS the mixes (moved to the end, never dropped)', forSong.length === rows.length && forSong[2] === 'mix1', JSON.stringify(forSong))
+  check('stable inside each group', forSong.join(',') === 'song1,song2,mix1,mix2', JSON.stringify(forSong))
+
+  check('top-result card honoured for long-form', honoursTopCard('lofi one hour') === true)
+  check('top-result card still skipped for song queries', honoursTopCard('tuchaiye') === false)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@
  */
 
 import { Heart, Plus, ListPlus, Play, Pause, Download, MoreHorizontal, Loader2, Check } from 'lucide-react'
-import { usePlayer, type PlayerTrack } from '@/store/player'
+import { usePlayer, fmtTime, type PlayerTrack } from '@/store/player'
 import { useLibrary } from '@/store/library'
 import { useNav } from '@/store/nav'
 import { useEffect, useState } from 'react'
@@ -74,12 +74,10 @@ export function TrackRow({
     .filter(Boolean)
     .join(' ')
 
-  const fmt = (s: number) => {
-    if (!s) return '—'
-    const m = Math.floor(s / 60)
-    const sec = Math.floor(s % 60)
-    return `${m}:${String(sec).padStart(2, '0')}`
-  }
+  // One duration formatter for the whole app: `fmtTime` already handles the
+  // hour case, so a 3-hour lofi set reads 3:03:37 instead of the old "183:37"
+  // (which looked like a bug and hid how long the long-form rows really are).
+  const fmt = (s: number) => (s ? fmtTime(s) : '—')
 
   const onDownload = () => void startDownload(track)
 

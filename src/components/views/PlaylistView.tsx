@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from 'react'
 import { Play, Shuffle, MoreHorizontal, Clock3, Trash2, Sparkles, Loader2, Plus } from 'lucide-react'
-import { usePlayer, type PlayerTrack } from '@/store/player'
+import { usePlayer, fmtTime, type PlayerTrack } from '@/store/player'
 import { useLibrary } from '@/store/library'
 import { api } from '@/store/nav'
 import { TrackRow } from '@/components/shared'
@@ -243,7 +243,7 @@ export function PlaylistView({ id }: { id: string }) {
                         <Plus size={18} />
                       </button>
                       <span className="text-[#a7a7a7] tabular-nums w-10 text-right">
-                        {Math.floor(t.duration / 60)}:{String(Math.floor(t.duration % 60)).padStart(2, '0')}
+                        {fmtTime(t.duration)}
                       </span>
                     </div>
                   </div>

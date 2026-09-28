@@ -18,6 +18,7 @@
 
 import { search as ytmSearch, type YtmTrack } from '@/lib/ytm'
 import { filterSafeTracks } from '@/lib/safety'
+import { wantsLongForm } from './longform'
 import type { SearchPlan } from './plan'
 import { correctedQuery } from './plan'
 import { feedLexicon } from './lexicon'
@@ -124,10 +125,14 @@ function deduped<T>(map: Map<string, Promise<T>>, key: string, make: () => Promi
 }
 
 /** One YTM catalog probe — never throws (fail-soft to []). */
-async function ytmProbe(q: string, signal?: AbortSignal): Promise<SearchRow[]> {
+async function ytmProbe(
+  q: string,
+  signal?: AbortSignal,
+  filter: 'songs' | 'videos' = 'songs',
+): Promise<SearchRow[]> {
   try {
     if (signal?.aborted) return [];
-    const res = await ytmSearch(q, 'songs');
+    const res = await ytmSearch(q, filter);
     const rows = filterSafeTracks(res.tracks ?? []).map((t: YtmTrack, i: number) => ytmToRow(t, i));
     return rows;
   } catch {
@@ -162,18 +167,25 @@ export async function retrieve(
   const job = (async () => {
     // ≤4 YTM catalog probes in parallel (wall = max probe) + ONE JioSaavn
     // authority probe on the normalized query (non-fatal; its rows carry
-    // the playCount/credits the YTM rows lack)
-    const ytmPools = await Promise.all(
-      allProbes.slice(0, 4).map(async (q) => {
+    // the playCount/credits the YTM rows lack) + ONE videos-filter probe when
+    // the query ASKS for long-form.
+    //
+    // The songs filter cannot see every long-form row (it is a songs list),
+    // so a "lofi one hour" / "rain sounds for sleeping" query gets an extra
+    // videos-filter pool. It races the others, so wall time is unchanged.
+    const longForm = wantsLongForm(plan.raw);
+    const ytmPools = await Promise.all([
+      ...allProbes.slice(0, 4).map(async (q) => {
         try {
           return await ytmProbe(q, signal);
         } catch {
           return [] as SearchRow[];
         }
       }),
-    );
+      longForm ? ytmProbe(plan.normalized, signal, 'videos') : Promise.resolve([] as SearchRow[]),
+    ]);
     const saavnRows = await searchSaavnCatalog(plan.normalized, limit, signal).catch(() => [] as SearchRow[]);
-    return { ytmPools, saavnRows };
+    return { ytmPools, saavnRows, longForm };
   })();
 
   // In-flight dedupe (P1-1): concurrent generations of the SAME key share
@@ -185,7 +197,7 @@ export async function retrieve(
     tracked.then((r) => [...r.ytmPools.flat(), ...r.saavnRows]),
   );
 
-  const { ytmPools, saavnRows } = await job;
+  const { ytmPools, saavnRows, longForm } = await job;
 
   // results feed the lexicon (titles/artists become correction vocab)
   for (const pool of ytmPools) {
@@ -196,9 +208,17 @@ export async function retrieve(
   const pools: Array<{ pool: string; rows: SearchRow[] }> = allProbes
     .slice(0, 4)
     .map((q, i) => ({ pool: `p${i + 1}`, rows: ytmPools[i] ?? [] }));
+  if (longForm) {
+    const lf = ytmPools[ytmPools.length - 1] ?? [];
+    if (lf.length > 0) pools.push({ pool: 'longform', rows: lf });
+  }
   if (saavnRows.length > 0) pools.push({ pool: 'saavn', rows: saavnRows });
 
-  return { pools, cacheHit: false, probes: allProbes };
+  return {
+    pools,
+    cacheHit: false,
+    probes: longForm ? [...allProbes, `${plan.normalized} (long-form · videos)`] : allProbes,
+  };
 }
 
 /** Cache write — called by the orchestrator AFTER rank (stores the
