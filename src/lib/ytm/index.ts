@@ -11,6 +11,7 @@ import { seedSearch, seedHome, seedArtist, seedAlbumTracks } from './seed'
 import { db } from '@/lib/db'
 import { filterSafeTracks, isShelfTitleSafe } from '@/lib/safety'
 import { reconcileRecordings } from '@/lib/search-v2/recording'
+import { orderWithLongForm } from '@/lib/search-v2/longform'
 
 export type { YtmTrack, YtmAlbum, YtmArtist, YtmShelf }
 
@@ -122,6 +123,12 @@ export async function search(query: string, filter?: keyof typeof SEARCH_FILTERS
         .sort((a, b) => (a.t.duration ? 0 : 1) - (b.t.duration ? 0 : 1) || a.i - b.i)
         .map((x) => x.t)
     }
+    // LONG-FORM: a query that ASKS for long-form content ("lofi one hour",
+    // "rain sounds for sleeping") leads with the long rows — that is the
+    // answer. Every other query keeps songs first and simply APPENDS its long
+    // rows rather than dropping them, so nothing leaves the list silently.
+    // (An explicit ?filter= is left exactly as the caller asked for.)
+    if (!filter) parsed.tracks = orderWithLongForm(parsed.tracks, query)
     // SAFETY: drop inappropriate content
     // R8-P4: recording reconciliation — same recording re-listed with
     // re-ordered/truncated credits collapses to one row (Top Songs fix).

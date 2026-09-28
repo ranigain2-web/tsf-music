@@ -19,7 +19,7 @@
 
 import { useEffect, useState } from 'react'
 import { Play } from 'lucide-react'
-import { usePlayer } from '@/store/player'
+import { usePlayer, fmtTime } from '@/store/player'
 import { Artwork } from '@/components/Artwork'
 import { TrackContextMenu } from '@/components/player/TrackContextMenu'
 import type { PlayerTrack } from '@/store/player'
@@ -44,12 +44,8 @@ function fmtViews(row: SearchRow): string | undefined {
   return undefined
 }
 
-const fmtDur = (s: number) => {
-  if (!s) return '—'
-  const m = Math.floor(s / 60)
-  const sec = Math.floor(s % 60)
-  return `${m}:${String(sec).padStart(2, '0')}`
-}
+// shared hour-aware formatter — a 1-hour mix must not read "61:01"
+const fmtDur = (s: number) => (s ? fmtTime(s) : '—')
 
 /** PlayerTrack projection — full-artist display + safe navigation ids. */
 export function rowToPlayerTrack(row: SearchRow): PlayerTrack {

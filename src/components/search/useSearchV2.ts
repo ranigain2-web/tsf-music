@@ -56,9 +56,13 @@ export function useSearchV2(): SearchV2Run {
   // walk (its results would be stale-swallowed anyway).
   const ytContRef = useRef<string | null>(null)
   const ytInflightRef = useRef<{ gen: number; p: Promise<void> } | null>(null)
+  /** the query the current generation is serving — a continuation page needs
+   *  it to order long-form rows the same way page 1 does */
+  const qRef = useRef('')
 
   const run = useCallback((q: string, source: SearchSourceKey) => {
     const query = q.trim()
+    qRef.current = query
     genRef.current += 1
     const myGen = genRef.current
     setGen(myGen)
@@ -158,7 +162,9 @@ export function useSearchV2(): SearchV2Run {
           const res = await fetch('/api/ytm/search-yt-more', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ continuation: cont }),
+            // `query` lets a long-form page keep the same ordering as page 1
+            // (mixes first for "lofi one hour", songs first otherwise)
+            body: JSON.stringify({ continuation: cont, query: qRef.current }),
           })
           if (genRef.current !== myGen) return
           const j = (await res.json()) as {
